@@ -189,6 +189,7 @@ assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
 # _parse_args: --only-* options can be combined with --short and --one-line.
 mode=""
 only_mode=""
+only_period=""
 one_line=""
 date_mode=""
 _parse_args --only-bar --short
@@ -209,6 +210,21 @@ _parse_args --only-bar --date
 assert_eq "bar" "$only_mode" "_parse_args --only-bar --date accepted"
 assert_eq "true" "$date_mode" "_parse_args --only-bar --date date_mode"
 
+# _parse_args: --only-* period options.
+_parse_args --only-rolling
+assert_eq "rolling" "$only_period" "_parse_args --only-rolling accepted"
+
+_parse_args --only-weekly
+assert_eq "weekly" "$only_period" "_parse_args --only-weekly accepted"
+
+_parse_args --only-monthly
+assert_eq "monthly" "$only_period" "_parse_args --only-monthly accepted"
+
+# _parse_args: period options can combine with --only-* output options.
+_parse_args --only-weekly --only-percent
+assert_eq "weekly" "$only_period" "_parse_args --only-weekly --only-percent period"
+assert_eq "percent" "$only_mode" "_parse_args --only-weekly --only-percent mode"
+
 # _parse_args: --only-* options remain mutually exclusive with each other.
 assert_args_fail() {
     local name="$1"
@@ -225,6 +241,8 @@ assert_args_fail() {
 
 assert_args_fail "_parse_args rejects --only-bar --only-percent" --only-bar --only-percent
 assert_args_fail "_parse_args rejects --only-percent --only-datetime" --only-percent --only-datetime
+assert_args_fail "_parse_args rejects --only-rolling --only-weekly" --only-rolling --only-weekly
+assert_args_fail "_parse_args rejects --only-weekly --only-monthly" --only-weekly --only-monthly
 assert_args_fail "_parse_args rejects removed -r option" -r
 assert_args_fail "_parse_args rejects removed --percent option" --percent
 
@@ -234,7 +252,7 @@ _timestamp() { printf '%s' "2026-08-23T12:00:00"; }
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _human_readable_short() { printf '%s' "FIXED"; }
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output "full" "plain" "0" "true" "true" "false" "vertical" "none")
+    | _render_output "full" "plain" "0" "true" "true" "false" "vertical" "none" "all")
 assert_eq "2026-08-23T12:00:00, 21% FIXED, 55% FIXED" "$output" \
     "_render_output one-line date prefix uses comma"
 
@@ -244,19 +262,27 @@ _seconds_until_iso() { printf '%s' "SECS"; }
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _timestamp() { printf '%s' "1755950400"; }
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output "full" "plain" "0" "false" "true" "true" "vertical" "none")
+    | _render_output "full" "plain" "0" "false" "true" "true" "vertical" "none" "all")
 first_line="${output%%$'\n'*}"
 assert_eq "1755950400 rolling 21 SECS" "$first_line" \
     "_render_output numbers date prefix uses epoch seconds"
 
 # _render_output: -d -n -1 uses epoch seconds and a comma separator.
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output "full" "plain" "0" "true" "true" "true" "vertical" "none")
+    | _render_output "full" "plain" "0" "true" "true" "true" "vertical" "none" "all")
 assert_eq "1755950400, 21 SECS, 55 SECS" "$output" \
     "_render_output numbers one-line date prefix uses epoch seconds and comma"
 
+# _render_output: --only-period filters to a single period.
+# shellcheck disable=SC2329  # invoked indirectly through _render_output
+_human_readable() { printf '%s' "DURATION"; }
+output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\nmonthly,45,2026-08-23T13:00:00Z\n' \
+    | _render_output "full" "plain" "0" "false" "false" "false" "vertical" "none" "weekly")
+assert_eq " weekly 55% DURATION" "$output" \
+    "_render_output --only-weekly filters periods"
+
 # Restore the real functions.
-unset -f _timestamp _human_readable_short _seconds_until_iso
+unset -f _timestamp _human_readable_short _seconds_until_iso _human_readable
 
 echo ""
 echo "passed: $pass  failed: $fail"

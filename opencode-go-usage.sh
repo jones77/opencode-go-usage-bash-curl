@@ -34,6 +34,9 @@ Options:
   --only-bar       show only the progress bar
   --only-percent   show only the percent value
   --only-datetime  show only the reset time / duration
+  --only-rolling   show only the rolling period
+  --only-weekly    show only the weekly period
+  --only-monthly   show only the monthly period
   -g, --gradient   gradient shade bar style
   -v, --vertical   vertical bar style (default)
   -z, --horizontal horizontal bar style
@@ -42,6 +45,8 @@ Options:
 By default, color is used only when stdout is a terminal.
   --date uses the local time (YYYY-MM-DDTHH:MM:SS).
   --only-bar, --only-percent, and --only-datetime are mutually exclusive
+  with each other.
+  --only-rolling, --only-weekly, and --only-monthly are mutually exclusive
   with each other.
 Bar styles (-v/-z/-g) are mutually exclusive; -v is the default.
 
@@ -478,7 +483,7 @@ _format_entry() {
 
 _render_output() {
     local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5" \
-        numbers_mode="$6" bar_style="$7" only_mode="$8"
+        numbers_mode="$6" bar_style="$7" only_mode="$8" only_period="$9"
 
     local use_color=false
     case "$color_mode" in
@@ -510,6 +515,11 @@ _render_output() {
     local period percent timedate joined=""
     while IFS=, read -r period percent timedate
     do
+        if [[ "$only_period" != "all" && "$period" != "$only_period" ]]
+        then
+            continue
+        fi
+
         local duration_text
         if [ "$only_mode" = "bar" ] || [ "$only_mode" = "percent" ]
         then
@@ -578,6 +588,15 @@ _set_only_mode() {
     only_mode="$new"
 }
 
+_set_only_period() {
+    local new="$1"
+    if [[ "$only_period" != "all" ]]
+    then
+        _exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
+    fi
+    only_period="$new"
+}
+
 _parse_args() {
     mode="full"
     color_mode="auto"
@@ -588,6 +607,7 @@ _parse_args() {
     bar_style="vertical"
     bar_style_set=false
     only_mode="none"
+    only_period="all"
 
     # Separate short and long options before dispatching. Only -w/--width
     # take values, so those two forms must consume their following argument.
@@ -681,6 +701,15 @@ _parse_args() {
             --only-datetime)
                 _set_only_mode "datetime"
                 ;;
+            --only-rolling)
+                _set_only_period "rolling"
+                ;;
+            --only-weekly)
+                _set_only_period "weekly"
+                ;;
+            --only-monthly)
+                _set_only_period "monthly"
+                ;;
             --*)
                 local name="${arg#--}"
                 local short
@@ -730,9 +759,9 @@ _main() {
         _exit_fail "--short and --one-line are mutually exclusive"
 
     # local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5"
-    # local numbers_mode="$6" bar_style="$7" only_mode="$8"
+    # local numbers_mode="$6" bar_style="$7" only_mode="$8" only_period="$9"
     _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line" \
-        "$date_mode" "$numbers_mode" "$bar_style" "$only_mode"
+        "$date_mode" "$numbers_mode" "$bar_style" "$only_mode" "$only_period"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
