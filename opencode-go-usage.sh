@@ -487,7 +487,12 @@ _render_output() {
     local timestamp=""
     if "$date_mode"
     then
-        timestamp="$(_iso_timestamp) "
+        if "$one_line"
+        then
+            timestamp="$(_iso_timestamp), "
+        else
+            timestamp="$(_iso_timestamp) "
+        fi
     fi
 
     local bar_width=$width

@@ -228,6 +228,19 @@ assert_args_fail "_parse_args rejects --only-percent --only-datetime" --only-per
 assert_args_fail "_parse_args rejects removed -r option" -r
 assert_args_fail "_parse_args rejects removed --percent option" --percent
 
+# _render_output: date prefix in one-line mode includes a comma.
+# shellcheck disable=SC2329  # invoked indirectly through _render_output
+_iso_timestamp() { printf '%s' "2026-08-23T12:00:00"; }
+# shellcheck disable=SC2329  # invoked indirectly through _render_output
+_human_readable_short() { printf '%s' "FIXED"; }
+output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
+    | _render_output "full" "plain" "0" "true" "true" "false" "vertical" "none")
+assert_eq "2026-08-23T12:00:00, 21% FIXED, 55% FIXED" "$output" \
+    "_render_output one-line date prefix uses comma"
+
+# Restore the real functions.
+unset -f _iso_timestamp _human_readable_short
+
 echo ""
 echo "passed: $pass  failed: $fail"
 exit "$fail"
