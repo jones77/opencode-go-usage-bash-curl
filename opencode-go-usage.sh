@@ -2,8 +2,20 @@
 
 set -euo pipefail
 
+echo "sourcing .env to get \$OPENCODE_GO_API_KEY"
+
 readonly progname="$(basename "${BASH_SOURCE[0]}")"
 readonly progdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$progdir" || exit 1
+source .env || exit 1
+
+# Ensure the environment variable is present
+# FIXME: Read from an .env file or ~/.local/share/opencode/auth.json
+if [ -z "$OPENCODE_GO_API_KEY" ]
+then
+    echo "$progname: error: need a OPENCODE_GO_API_KEY environment variable."
+    exit 1
+fi
 
 _format_duration() {
     declare -A args=(
@@ -102,40 +114,35 @@ _bar() {
     echo -n "]"
 }
 
+main() {
+    # Execute the request and grab the HTTP status code
+    readonly response=$(curl -s -w "%{http_code}" -X GET "https://opencode.ai/zen/go/v1/usage" \
+      -H "Authorization: Bearer $OPENCODE_GO_API_KEY" \
+      -H "Accept: application/json")
 
-# Ensure the environment variable is present
-# FIXME: Read from an .env file or ~/.local/share/opencode/auth.json
-if [ -z "$OPENCODE_GO_API_KEY" ]
-then
-    echo "$progname: error: need a OPENCODE_GO_API_KEY environment variable."
-    exit 1
-fi
+    # Separate the HTTP status code from the JSON body
+    readonly http_status="${response:${#response}-3}"
+    readonly body="${response:0:${#response}-3}"
 
-# Execute the request and grab the HTTP status code
-readonly response=$(curl -s -w "%{http_code}" -X GET "https://opencode.ai/zen/go/v1/usage" \
-  -H "Authorization: Bearer $OPENCODE_GO_API_KEY" \
-  -H "Accept: application/json")
+    if [ "$http_status" -ne 200 ]
+    then
+        echo "API Request Failed with Status: $http_status"
+        echo "Response: $body"
+        exit 1
+    fi
 
-# Separate the HTTP status code from the JSON body
-readonly http_status="${response:${#response}-3}"
-readonly body="${response:0:${#response}-3}"
+    # Print formatted output using jq
+    printf "usage\t\tresets\n\n"
+    for i in "rolling" "weekly" "monthly"
+    do
+        percent="$(echo "$body" | jq -r ".usage.$i.percent")"
+        bar=$(_bar "$percent")
+        timedate="$(echo "$body" | jq -r ".usage.$i.resetsAt")"
 
-if [ "$http_status" -ne 200 ]
-then
-    echo "API Request Failed with Status: $http_status"
-    echo "Response: $body"
-    exit 1
-fi
+        printf "%0.0f%% $i\t%s\n" "${percent}" "$timedate"
+        printf "%s\t%s\n" "$bar" "$(human_readable "$timedate")"
+        [[ "$i" != "monthly" ]] && echo
+    done
+}
 
-# Print formatted output using jq
-printf "usage\t\tresets\n\n"
-for i in "rolling" "weekly" "monthly"
-do
-    percent="$(echo "$body" | jq -r ".usage.$i.percent")"
-    bar=$(_bar "$percent")
-    timedate="$(echo "$body" | jq -r ".usage.$i.resetsAt")"
-
-    printf "%0.0f%% $i\t%s\n" "${percent}" "$timedate"
-    printf "%s\t%s\n" "$bar" "$(human_readable "$timedate")"
-    [[ "$i" != "monthly" ]] && echo
-done
+main "$@"
