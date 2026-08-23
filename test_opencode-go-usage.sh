@@ -139,6 +139,11 @@ assert_eq " 1d  2h  3m  4s"   "$(_format_duration 1 2 3 4)" "_format_duration 1d
 assert_eq " 1h  1s"           "$(_format_duration 0 1 0 1)" "_format_duration skip zero units"
 assert_eq " 5d"              "$(_format_duration 5 0 0 0)" "_format_duration days only"
 
+# _duration_from_iso8601: past dates clamp to 0 instead of failing.
+assert_eq "0 0 0 0" \
+    "$(_duration_from_iso8601 "2020-01-01T00:00:00Z")" \
+    "_duration_from_iso8601 past date clamps to zero"
+
 # _format_entry: numbers and --only-* modes.
 # Signature: period percent duration_text short one_line width color \
 #            numbers_mode bar_style only_style
@@ -256,6 +261,8 @@ assert_args_fail "_parse_args rejects --only-rolling --only-weekly" --only-rolli
 assert_args_fail "_parse_args rejects --only-weekly --only-monthly" --only-weekly --only-monthly
 assert_args_fail "_parse_args rejects removed -r option" -r
 assert_args_fail "_parse_args rejects removed --percent option" --percent
+assert_args_fail "_main rejects --only-bar --short" --only-bar --short
+assert_args_fail "_main rejects --only-bar --one-line" --only-bar --one-line
 
 # _render_output helpers set the shared-state globals before each call.
 # shellcheck disable=SC2034  # these globals are consumed by _render_output

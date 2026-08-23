@@ -7,7 +7,6 @@ set -euo pipefail
 
 readonly progname="$(basename "${BASH_SOURCE[0]}")"
 readonly progdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$progdir" || exit 1
 
 readonly cache_filename=".opencode-go-usage-cache"
 readonly cache_filename_ttl=120
@@ -197,7 +196,7 @@ _duration_from_iso8601() {
     local diff
     diff=$(_seconds_until_iso "$iso8601_date")
 
-    (( diff < 0 )) && _exit_fail "unexpected negative diff='$diff'"
+    (( diff < 0 )) && diff=0
 
     local days=$((    diff / 86400))
     local hours=$(((  diff % 86400) / 3600))
@@ -325,7 +324,7 @@ _fetch_api() {
     # shellcheck source=/dev/null
     source .env \
         || _exit_fail "expected to source ./.env to get \$OPENCODE_GO_API_KEY"
-    if [ -z "$OPENCODE_GO_API_KEY" ]
+    if [[ -z "$OPENCODE_GO_API_KEY" ]]
     then
         echo "$progname: error: need a OPENCODE_GO_API_KEY environment variable." >&2
         exit 1
@@ -339,14 +338,18 @@ _fetch_api() {
     trap "rm -f '$auth_header_file'" EXIT
     (umask 077; printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" > "$auth_header_file")
 
-    readonly response=$(curl \
+    local curl_exit=0
+    response=$(curl \
         -s -w "%{http_code}" -X GET "https://opencode.ai/zen/go/v1/usage" \
         -H "@$auth_header_file" \
         -H "Accept: application/json"
-    )
+    ) || curl_exit=$?
 
     trap - EXIT
     rm -f "$auth_header_file"
+
+    (( curl_exit != 0 )) && _exit_fail \
+        "curl failed with exit code $curl_exit (connection error)"
 
     readonly http_status="${response:${#response}-3}"
     readonly body="${response:0:${#response}-3}"
@@ -511,7 +514,7 @@ _set_only_style() {
 _set_only_period() {
     local new="$1"
     [[ "$only_period" != "all" ]] \
-        &&_exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
+        && _exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
     only_period="$new"
 }
 
@@ -663,11 +666,11 @@ _render_output() {
     case "$color_mode" in
         color) use_color=true ;;
         plain) use_color=false ;;
-        auto)  [ -t 1 ] && use_color=true ;;
+        auto)  [[ -t 1 ]] && use_color=true ;;
     esac
 
     local short_mode=false
-    [ "$display" = "short" ] && short_mode=true
+    [[ "$display" = "short" ]] && short_mode=true
 
     local timestamp=""
     if "$date_mode"
@@ -681,7 +684,7 @@ _render_output() {
     fi
 
     local bar_width=$width
-    if [ "$only_style" = "percent" ] || [ "$only_style" = "datetime" ]
+    if [[ "$only_style" = "percent" || "$only_style" = "datetime" ]]
     then
         bar_width=0
     fi
@@ -695,7 +698,7 @@ _render_output() {
         fi
 
         local duration_text
-        if [ "$only_style" = "bar" ] || [ "$only_style" = "percent" ]
+        if [[ "$only_style" = "bar" || "$only_style" = "percent" ]]
         then
             duration_text=""
         elif "$numbers_mode"
@@ -732,8 +735,8 @@ _main() {
 
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
-        if [ "$display" = "short" ] || [ "$one_line" = true ] || \
-           [ "$only_style" = "percent" ] || [ "$only_style" = "datetime" ]
+        if [[ "$display" = "short" || "$one_line" = true || \
+           "$only_style" = "percent" || "$only_style" = "datetime" ]]
         then
             width=0
         else
@@ -747,13 +750,18 @@ _main() {
     (( width < 0 || width > 13 )) && \
         _exit_fail "width must be between 0 and 13 (got '$width')"
 
-    [ "$display" = "short" ] && [ "$one_line" = true ] && \
+    [[ "$display" = "short" && "$one_line" = true ]] && \
         _exit_fail "--short and --one-line are mutually exclusive"
+
+    [[ "$only_style" = "bar" && \
+       ( "$display" = "short" || "$one_line" = true ) ]] && \
+        _exit_fail "--only-bar cannot be used with --short or --one-line (bar width would be 0)"
 
     _load_lines | _render_output
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
 then
+    cd "$progdir" || exit 1
     _main "$@"
 fi
