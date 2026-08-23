@@ -140,9 +140,6 @@ readonly -A _long_alias=(
     [vertical]=v
     [width]=w
 )
-readonly -A _takes_arg=(
-    [w]=1
-)
 
 _format_duration() {
     declare -A args=(
@@ -637,7 +634,7 @@ _parse_args() {
                 _exit_fail "-$OPTARG requires a value"
                 ;;
             *)
-                if [[ -n "${_takes_arg[$opt]:-}" ]]
+                if [[ "$opt" == "w" ]]
                 then
                     _apply_option "$opt" "$OPTARG"
                 else
@@ -682,7 +679,7 @@ _parse_args() {
                     _usage
                     _exit_fail "unknown argument: '$arg'"
                 fi
-                if [[ -n "${_takes_arg[$short]:-}" ]]
+                if [[ "$short" == "w" ]]
                 then
                     if (( $# == 0 ))
                     then
