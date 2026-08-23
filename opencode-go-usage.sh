@@ -482,8 +482,8 @@ _format_entry() {
 }
 
 _render_output() {
-    local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5" \
-        numbers_mode="$6" bar_style="$7" only_mode="$8" only_period="$9"
+    # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
+    # Uses the shared state globals documented above _parse_args.
 
     local use_color=false
     case "$color_mode" in
@@ -597,6 +597,22 @@ _set_only_period() {
     only_period="$new"
 }
 
+# Shared state: the following globals are set by _parse_args and consumed by
+# _main and _render_output. Keep them in sync across these functions.
+#
+#   mode          "full" | "short"
+#   color_mode    "auto" | "color" | "plain"
+#   width         bar width (numeric string), "" means "use default"
+#   one_line      true | false
+#   date_mode     true | false
+#   numbers_mode  true | false
+#   bar_style     "vertical" | "horizontal" | "gradient"
+#   bar_style_set true | false (used only during _parse_args for exclusivity)
+#   only_mode     "none" | "bar" | "percent" | "datetime"
+#   only_period   "all" | "rolling" | "weekly" | "monthly"
+#
+# _main uses: mode, one_line, only_mode, width (for default-width logic).
+# _render_output uses all of the above except bar_style_set.
 _parse_args() {
     mode="full"
     color_mode="auto"
@@ -617,10 +633,7 @@ _parse_args() {
     do
         case "$1" in
             --width)
-                if (( $# < 2 ))
-                then
-                    _exit_fail "--width requires a value"
-                fi
+                (( $# < 2 )) && _exit_fail "--width requires a value"
                 long_args+=("$1" "$2")
                 shift 2
                 ;;
@@ -652,26 +665,19 @@ _parse_args() {
         esac
     done
 
-    local OPTIND=1
-    local OPTARG=""
-    local opt
+    local OPTIND=1 OPTARG="" opt
     while getopts "$_optstring" opt "${short_args[@]}"
     do
         case "$opt" in
-            \?)
-                _exit_fail "unknown option: -$OPTARG"
-                ;;
-            :)
-                _exit_fail "-$OPTARG requires a value"
-                ;;
-            *)
-                if [[ "$opt" == "w" ]]
+            \?) _exit_fail "unknown option: -$OPTARG" ;;
+             :) _exit_fail "-$OPTARG requires a value" ;;
+             *) if [[ "$opt" == "w" ]]
                 then
                     _apply_option "$opt" "$OPTARG"
                 else
                     _apply_option "$opt"
                 fi
-                ;;
+             ;;
         esac
     done
 
@@ -681,9 +687,7 @@ _parse_args() {
         local arg="$1"
         shift
         case "$arg" in
-            --width=*)
-                width="${arg#--width=}"
-                ;;
+            --width=*) width="${arg#--width=}" ;;
             --width)
                 if (( $# == 0 ))
                 then
@@ -692,24 +696,12 @@ _parse_args() {
                 _apply_option "w" "$1"
                 shift
                 ;;
-            --only-bar)
-                _set_only_mode "bar"
-                ;;
-            --only-percent)
-                _set_only_mode "percent"
-                ;;
-            --only-datetime)
-                _set_only_mode "datetime"
-                ;;
-            --only-rolling)
-                _set_only_period "rolling"
-                ;;
-            --only-weekly)
-                _set_only_period "weekly"
-                ;;
-            --only-monthly)
-                _set_only_period "monthly"
-                ;;
+            --only-bar)      _set_only_mode "bar"       ;;
+            --only-percent)  _set_only_mode "percent"   ;;
+            --only-datetime) _set_only_mode "datetime"  ;;
+            --only-rolling)  _set_only_period "rolling" ;;
+            --only-weekly)   _set_only_period "weekly"  ;;
+            --only-monthly)  _set_only_period "monthly" ;;
             --*)
                 local name="${arg#--}"
                 local short
@@ -721,10 +713,7 @@ _parse_args() {
                 fi
                 if [[ "$short" == "w" ]]
                 then
-                    if (( $# == 0 ))
-                    then
-                        _exit_fail "--$name requires a value"
-                    fi
+                    (( $# == 0 )) && _exit_fail "--$name requires a value"
                     _apply_option "$short" "$1"
                     shift
                 else
@@ -758,10 +747,7 @@ _main() {
     [ "$mode" = "short" ] && [ "$one_line" = true ] && \
         _exit_fail "--short and --one-line are mutually exclusive"
 
-    # local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5"
-    # local numbers_mode="$6" bar_style="$7" only_mode="$8" only_period="$9"
-    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line" \
-        "$date_mode" "$numbers_mode" "$bar_style" "$only_mode" "$only_period"
+    _load_lines | _render_output
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]

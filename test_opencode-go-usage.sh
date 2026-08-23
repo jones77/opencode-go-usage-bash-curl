@@ -246,13 +246,28 @@ assert_args_fail "_parse_args rejects --only-weekly --only-monthly" --only-weekl
 assert_args_fail "_parse_args rejects removed -r option" -r
 assert_args_fail "_parse_args rejects removed --percent option" --percent
 
+# _render_output helpers set the shared-state globals before each call.
+# shellcheck disable=SC2034  # these globals are consumed by _render_output
+_setup_render_output() {
+    mode="$1"
+    color_mode="$2"
+    width="$3"
+    one_line="$4"
+    date_mode="$5"
+    numbers_mode="$6"
+    bar_style="$7"
+    only_mode="$8"
+    only_period="$9"
+}
+
 # _render_output: date prefix in one-line mode includes a comma.
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _timestamp() { printf '%s' "2026-08-23T12:00:00"; }
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _human_readable_short() { printf '%s' "FIXED"; }
+_setup_render_output "full" "plain" "0" "true" "true" "false" "vertical" "none" "all"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output "full" "plain" "0" "true" "true" "false" "vertical" "none" "all")
+    | _render_output)
 assert_eq "2026-08-23T12:00:00, 21% FIXED, 55% FIXED" "$output" \
     "_render_output one-line date prefix uses comma"
 
@@ -261,23 +276,26 @@ assert_eq "2026-08-23T12:00:00, 21% FIXED, 55% FIXED" "$output" \
 _seconds_until_iso() { printf '%s' "SECS"; }
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _timestamp() { printf '%s' "1755950400"; }
+_setup_render_output "full" "plain" "0" "false" "true" "true" "vertical" "none" "all"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output "full" "plain" "0" "false" "true" "true" "vertical" "none" "all")
+    | _render_output)
 first_line="${output%%$'\n'*}"
 assert_eq "1755950400 rolling 21 SECS" "$first_line" \
     "_render_output numbers date prefix uses epoch seconds"
 
 # _render_output: -d -n -1 uses epoch seconds and a comma separator.
+_setup_render_output "full" "plain" "0" "true" "true" "true" "vertical" "none" "all"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output "full" "plain" "0" "true" "true" "true" "vertical" "none" "all")
+    | _render_output)
 assert_eq "1755950400, 21 SECS, 55 SECS" "$output" \
     "_render_output numbers one-line date prefix uses epoch seconds and comma"
 
 # _render_output: --only-period filters to a single period.
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _human_readable() { printf '%s' "DURATION"; }
+_setup_render_output "full" "plain" "0" "false" "false" "false" "vertical" "none" "weekly"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\nmonthly,45,2026-08-23T13:00:00Z\n' \
-    | _render_output "full" "plain" "0" "false" "false" "false" "vertical" "none" "weekly")
+    | _render_output)
 assert_eq " weekly 55% DURATION" "$output" \
     "_render_output --only-weekly filters periods"
 
