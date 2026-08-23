@@ -230,7 +230,7 @@ assert_args_fail "_parse_args rejects removed --percent option" --percent
 
 # _render_output: date prefix in one-line mode includes a comma.
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
-_iso_timestamp() { printf '%s' "2026-08-23T12:00:00"; }
+_timestamp() { printf '%s' "2026-08-23T12:00:00"; }
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _human_readable_short() { printf '%s' "FIXED"; }
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
@@ -238,8 +238,25 @@ output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z
 assert_eq "2026-08-23T12:00:00, 21% FIXED, 55% FIXED" "$output" \
     "_render_output one-line date prefix uses comma"
 
+# _render_output: -d with -n uses epoch seconds for the timestamp prefix.
+# shellcheck disable=SC2329  # invoked indirectly through _render_output
+_seconds_until_iso() { printf '%s' "SECS"; }
+# shellcheck disable=SC2329  # invoked indirectly through _render_output
+_timestamp() { printf '%s' "1755950400"; }
+output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
+    | _render_output "full" "plain" "0" "false" "true" "true" "vertical" "none")
+first_line="${output%%$'\n'*}"
+assert_eq "1755950400 rolling 21 SECS" "$first_line" \
+    "_render_output numbers date prefix uses epoch seconds"
+
+# _render_output: -d -n -1 uses epoch seconds and a comma separator.
+output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
+    | _render_output "full" "plain" "0" "true" "true" "true" "vertical" "none")
+assert_eq "1755950400, 21 SECS, 55 SECS" "$output" \
+    "_render_output numbers one-line date prefix uses epoch seconds and comma"
+
 # Restore the real functions.
-unset -f _iso_timestamp _human_readable_short
+unset -f _timestamp _human_readable_short _seconds_until_iso
 
 echo ""
 echo "passed: $pass  failed: $fail"

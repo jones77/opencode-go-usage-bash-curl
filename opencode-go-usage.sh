@@ -88,8 +88,14 @@ recurring decimal only appears in this description.
 EOF
 }
 
-_iso_timestamp() {
-    printf '%s' "$(date +%Y-%m-%dT%H:%M:%S)"
+_timestamp() {
+    local numbers_mode="$1"
+    if "$numbers_mode"
+    then
+        printf '%s' "$(date +%s)"
+    else
+        printf '%s' "$(date +%Y-%m-%dT%H:%M:%S)"
+    fi
 }
 
 _cache_file() {
@@ -489,9 +495,9 @@ _render_output() {
     then
         if "$one_line"
         then
-            timestamp="$(_iso_timestamp), "
+            timestamp="$(_timestamp "$numbers_mode"), "
         else
-            timestamp="$(_iso_timestamp) "
+            timestamp="$(_timestamp "$numbers_mode") "
         fi
     fi
 
