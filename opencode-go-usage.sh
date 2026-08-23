@@ -613,7 +613,20 @@ _set_only_period() {
 #
 # _main uses: mode, one_line, only_mode, width (for default-width logic).
 # _render_output uses all of the above except bar_style_set.
+mode="full"
+color_mode="auto"
+width=""
+one_line=false
+date_mode=false
+numbers_mode=false
+bar_style="vertical"
+bar_style_set=false
+only_mode="none"
+only_period="all"
+
 _parse_args() {
+    # Reset shared-state globals to defaults on each invocation so repeated
+    # calls (e.g. in tests) don't see stale values.
     mode="full"
     color_mode="auto"
     width=""
