@@ -24,31 +24,26 @@ Usage: $progname [options]
 Print OpenCode Go usage numbers and reset times.
 
 Options:
-  -h, --help       show this help
-  -c, --color      force colored output
-  -p, --plain      force plain output (no color)
-  -d, --date       prefix each output line with a local ISO timestamp
-  -n, --numbers    omit '%' and show seconds remaining instead of duration
-  -1, --one-line   print all values on one line, comma-separated
-  -s, --short      compact output: <percent> <short-date>
-  --only-bar       show only the progress bar
-  --only-percent   show only the percent value
-  --only-datetime  show only the reset time / duration
-  --only-rolling   show only the rolling period
-  --only-weekly    show only the weekly period
-  --only-monthly   show only the monthly period
-  -g, --gradient   gradient shade bar style
-  -v, --vertical   vertical bar style (default)
-  -z, --horizontal horizontal bar style
-  -w N, --width=N  bar width, 0-13 (default: 8; 0 when no bar is drawn)
+  -h, --help
+  -c, --color    force colored output (default when a terminal detected)
+  -p, --plain    force plain output (no color)
+  -d, --date     prefix each output line with a local ISO timestamp
+  -n, --numbers  omit '%' and show seconds remaining instead of duration
+  -1, --one-line print all values on one line, comma-separated
+  -s, --short    compact output: <percent> <short-date>
+Bar styles (-v/-z/-g) are mutually exclusive; -v is the default:
+  -v,   --vertical   vertical bar style
+  -z,   --horizontal horizontal bar style
+  -g,   --gradient   gradient shade bar style
+  -w N, --width=N    0-13 (8 is the default; 0 means no bar is drawn)
+        --only-percent/-bar/-datetime
+            only show one field: percent remaining / progress bar /  reset time
+        --only-rolling/-weekly/-monthly
+            only show one period: rolling / weekly / monthly
 
-By default, color is used only when stdout is a terminal.
-  --date uses the local time (YYYY-MM-DDTHH:MM:SS).
-  --only-bar, --only-percent, and --only-datetime are mutually exclusive
-  with each other.
-  --only-rolling, --only-weekly, and --only-monthly are mutually exclusive
-  with each other.
-Bar styles (-v/-z/-g) are mutually exclusive; -v is the default.
+To prefix when your OpenCode Go usage was updated
+(from the scripts perspective!)
+    -d/--date uses the local time (YYYY-MM-DDTHH:MM:SS)
 
 The -g, gradient bar uses four shades with 4 steps per cell:        ␣░▒▓█
                                                                     01234
