@@ -398,7 +398,7 @@ _load_lines() {
 _format_entry() {
     local period="$1" percent="$2" duration_text="$3" short_mode="$4" \
         one_line="$5" width="$6" use_color="$7" numbers_mode="$8" \
-        bar_style="${9}" only_mode="${10}"
+        bar_style="${9}" only_style="${10}"
 
     local short_period="${period_label[$period]}"
     [[ -n "$short_period" ]] || _exit_fail "unexpected period: '$period'"
@@ -416,7 +416,7 @@ _format_entry() {
         bar_part=" $(_bar "$percent" "$width" "$bar_style")"
     fi
 
-    case "$only_mode" in
+    case "$only_style" in
         bar)
             printf "%s%s%s" \
                 "$color_esc" "$(_bar "$percent" "$width" "$bar_style")" "$reset_esc"
@@ -481,77 +481,6 @@ _format_entry() {
         "$color_esc" "$prefix" "$percent" "$bar_part" "$duration_text" "$reset_esc"
 }
 
-_render_output() {
-    # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
-    # Uses the shared state globals documented above _parse_args.
-
-    local use_color=false
-    case "$color_mode" in
-        color) use_color=true ;;
-        plain) use_color=false ;;
-        auto)  [ -t 1 ] && use_color=true ;;
-    esac
-
-    local short_mode=false
-    [ "$mode" = "short" ] && short_mode=true
-
-    local timestamp=""
-    if "$date_mode"
-    then
-        if "$one_line"
-        then
-            timestamp="$(_timestamp "$numbers_mode"), "
-        else
-            timestamp="$(_timestamp "$numbers_mode") "
-        fi
-    fi
-
-    local bar_width=$width
-    if [ "$only_mode" = "percent" ] || [ "$only_mode" = "datetime" ]
-    then
-        bar_width=0
-    fi
-
-    local period percent timedate joined=""
-    while IFS=, read -r period percent timedate
-    do
-        if [[ "$only_period" != "all" && "$period" != "$only_period" ]]
-        then
-            continue
-        fi
-
-        local duration_text
-        if [ "$only_mode" = "bar" ] || [ "$only_mode" = "percent" ]
-        then
-            duration_text=""
-        elif "$numbers_mode"
-        then
-            duration_text=$(_seconds_until_iso "$timedate")
-        elif "$short_mode" || "$one_line"
-        then
-            duration_text=$(_human_readable_short "$timedate")
-        else
-            duration_text=$(_human_readable "$timedate")
-        fi
-
-        local line
-        line=$(_format_entry "$period" "$percent" "$duration_text" \
-            "$short_mode" "$one_line" "$bar_width" "$use_color" \
-            "$numbers_mode" "$bar_style" "$only_mode")
-        if "$one_line"
-        then
-            joined="${joined:+$joined, }$line"
-        else
-            printf '%s\n' "${timestamp}${line}"
-        fi
-    done
-
-    if "$one_line" && [[ -n "$joined" ]]
-    then
-        printf '%s\n' "${timestamp}${joined}"
-    fi
-}
-
 _apply_option() {
     local short="$1" arg="${2:-}"
     case "$short" in
@@ -561,17 +490,12 @@ _apply_option() {
         d) date_mode=true ;;
         n) numbers_mode=true ;;
         1) one_line=true ;;
-        s) mode="short" ;;
+        s) display="short" ;;
         v|z|g)
-            if [[ "$bar_style_set" == true ]]
-            then
-                _exit_fail "bar styles are mutually exclusive"
-            fi
-            case "$short" in
-                v) bar_style="vertical" ;;
-                z) bar_style="horizontal" ;;
-                g) bar_style="gradient" ;;
-            esac
+            [[ "$bar_style_set" == true ]] && _exit_fail "styles are exclusive"
+            case "$short" in v) bar_style="vertical"   ;;
+                             z) bar_style="horizontal" ;;
+                             g) bar_style="gradient"   ;; esac
             bar_style_set=true
             ;;
         w) width="$arg" ;;
@@ -579,41 +503,34 @@ _apply_option() {
     esac
 }
 
-_set_only_mode() {
+_set_only_style() {
     local new="$1"
-    if [[ "$only_mode" != "none" ]]
-    then
-        _exit_fail "--only-* options are mutually exclusive"
-    fi
-    only_mode="$new"
+    [[ "$only_style" != "none" ]] \
+        && _exit_fail "--only-* options are mutually exclusive"
+    only_style="$new"
 }
 
 _set_only_period() {
     local new="$1"
-    if [[ "$only_period" != "all" ]]
-    then
-        _exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
-    fi
+    [[ "$only_period" != "all" ]] \
+        &&_exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
     only_period="$new"
 }
 
 # Shared state: the following globals are set by _parse_args and consumed by
 # _main and _render_output. Keep them in sync across these functions.
 #
-#   mode          "full" | "short"
-#   color_mode    "auto" | "color" | "plain"
-#   width         bar width (numeric string), "" means "use default"
-#   one_line      true | false
-#   date_mode     true | false
-#   numbers_mode  true | false
-#   bar_style     "vertical" | "horizontal" | "gradient"
-#   bar_style_set true | false (used only during _parse_args for exclusivity)
-#   only_mode     "none" | "bar" | "percent" | "datetime"
-#   only_period   "all" | "rolling" | "weekly" | "monthly"
-#
-# _main uses: mode, one_line, only_mode, width (for default-width logic).
-# _render_output uses all of the above except bar_style_set.
-mode="full"
+#       display            "full" | "short"
+#       color_mode      "auto" | "color" | "plain"
+#       width           bar width (numeric string), "" means "use default"
+#       one_line        true | false
+#       date_mode       true | false
+#       numbers_mode    true | false
+#       bar_style       "vertical" | "horizontal" | "gradient"
+#       bar_style_set   true | false
+#       only_style      "none" | "bar" | "percent" | "datetime"
+#       only_period     "all" | "rolling" | "weekly" | "monthly"
+display="full"
 color_mode="auto"
 width=""
 one_line=false
@@ -621,13 +538,13 @@ date_mode=false
 numbers_mode=false
 bar_style="vertical"
 bar_style_set=false
-only_mode="none"
+only_style="none"
 only_period="all"
 
 _parse_args() {
     # Reset shared-state globals to defaults on each invocation so repeated
     # calls (e.g. in tests) don't see stale values.
-    mode="full"
+    display="full"
     color_mode="auto"
     width=""
     one_line=false
@@ -635,7 +552,7 @@ _parse_args() {
     numbers_mode=false
     bar_style="vertical"
     bar_style_set=false
-    only_mode="none"
+    only_style="none"
     only_period="all"
 
     # Separate short and long options before dispatching. Only -w/--width
@@ -709,9 +626,9 @@ _parse_args() {
                 _apply_option "w" "$1"
                 shift
                 ;;
-            --only-bar)      _set_only_mode "bar"       ;;
-            --only-percent)  _set_only_mode "percent"   ;;
-            --only-datetime) _set_only_mode "datetime"  ;;
+            --only-bar)      _set_only_style "bar"       ;;
+            --only-percent)  _set_only_style "percent"   ;;
+            --only-datetime) _set_only_style "datetime"  ;;
             --only-rolling)  _set_only_period "rolling" ;;
             --only-weekly)   _set_only_period "weekly"  ;;
             --only-monthly)  _set_only_period "monthly" ;;
@@ -737,13 +654,85 @@ _parse_args() {
     done
 }
 
+_render_output() {
+    # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
+    # Uses the shared state globals documented above _parse_args.
+
+    local use_color=false
+    case "$color_mode" in
+        color) use_color=true ;;
+        plain) use_color=false ;;
+        auto)  [ -t 1 ] && use_color=true ;;
+    esac
+
+    local short_mode=false
+    [ "$display" = "short" ] && short_mode=true
+
+    local timestamp=""
+    if "$date_mode"
+    then
+        if "$one_line"
+        then
+            timestamp="$(_timestamp "$numbers_mode"), "
+        else
+            timestamp="$(_timestamp "$numbers_mode") "
+        fi
+    fi
+
+    local bar_width=$width
+    if [ "$only_style" = "percent" ] || [ "$only_style" = "datetime" ]
+    then
+        bar_width=0
+    fi
+
+    local period percent timedate joined=""
+    while IFS=, read -r period percent timedate
+    do
+        if [[ "$only_period" != "all" && "$period" != "$only_period" ]]
+        then
+            continue
+        fi
+
+        local duration_text
+        if [ "$only_style" = "bar" ] || [ "$only_style" = "percent" ]
+        then
+            duration_text=""
+        elif "$numbers_mode"
+        then
+            duration_text=$(_seconds_until_iso "$timedate")
+        elif "$short_mode" || "$one_line"
+        then
+            duration_text=$(_human_readable_short "$timedate")
+        else
+            duration_text=$(_human_readable "$timedate")
+        fi
+
+        local line
+        line=$(_format_entry "$period" "$percent" "$duration_text" \
+            "$short_mode" "$one_line" "$bar_width" "$use_color" \
+            "$numbers_mode" "$bar_style" "$only_style")
+        if "$one_line"
+        then
+            joined="${joined:+$joined, }$line"
+        else
+            printf '%s\n' "${timestamp}${line}"
+        fi
+    done
+
+    if "$one_line" && [[ -n "$joined" ]]
+    then
+        printf '%s\n' "${timestamp}${joined}"
+    fi
+}
+
+
 _main() {
     _parse_args "$@"
 
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
-        if [ "$mode" = "short" ] || [ "$one_line" = true ] || \
-           [ "$only_mode" = "percent" ] || [ "$only_mode" = "datetime" ]
+        if [ "$display" = "short" ] || [ "$one_line" = true ] || \
+           [ "$only_style" = "percent" ] || [ "$only_style" = "datetime" ]
         then
             width=0
         else
@@ -757,7 +746,7 @@ _main() {
     (( width < 0 || width > 13 )) && \
         _exit_fail "width must be between 0 and 13 (got '$width')"
 
-    [ "$mode" = "short" ] && [ "$one_line" = true ] && \
+    [ "$display" = "short" ] && [ "$one_line" = true ] && \
         _exit_fail "--short and --one-line are mutually exclusive"
 
     _load_lines | _render_output

@@ -141,7 +141,7 @@ assert_eq " 5d"              "$(_format_duration 5 0 0 0)" "_format_duration day
 
 # _format_entry: numbers and --only-* modes.
 # Signature: period percent duration_text short one_line width color \
-#            numbers_mode bar_style only_mode
+#            numbers_mode bar_style only_style
 assert_eq "rolling 50 12345" \
     "$(_format_entry "rolling" 50 "12345" false false 0 false true "vertical" "none")" \
     "_format_entry numbers full"
@@ -187,27 +187,27 @@ assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
     "_format_entry only datetime one-line color aligned"
 
 # _parse_args: --only-* options can be combined with --short and --one-line.
-mode=""
-only_mode=""
+display=""
+only_style=""
 only_period=""
 one_line=""
 date_mode=""
 _parse_args --only-bar --short
-assert_eq "bar" "$only_mode" "_parse_args --only-bar --short accepted"
-assert_eq "short" "$mode" "_parse_args --only-bar --short mode"
+assert_eq "bar" "$only_style" "_parse_args --only-bar --short accepted"
+assert_eq "short" "$display" "_parse_args --only-bar --short mode"
 
 _parse_args --only-bar --one-line
-assert_eq "bar" "$only_mode" "_parse_args --only-bar --one-line accepted"
+assert_eq "bar" "$only_style" "_parse_args --only-bar --one-line accepted"
 assert_eq "true" "$one_line" "_parse_args --only-bar --one-line one_line"
 
 _parse_args --only-percent --short
-assert_eq "percent" "$only_mode" "_parse_args --only-percent --short accepted"
+assert_eq "percent" "$only_style" "_parse_args --only-percent --short accepted"
 
 _parse_args --only-datetime --one-line
-assert_eq "datetime" "$only_mode" "_parse_args --only-datetime --one-line accepted"
+assert_eq "datetime" "$only_style" "_parse_args --only-datetime --one-line accepted"
 
 _parse_args --only-bar --date
-assert_eq "bar" "$only_mode" "_parse_args --only-bar --date accepted"
+assert_eq "bar" "$only_style" "_parse_args --only-bar --date accepted"
 assert_eq "true" "$date_mode" "_parse_args --only-bar --date date_mode"
 
 # _parse_args: --only-* period options.
@@ -223,7 +223,7 @@ assert_eq "monthly" "$only_period" "_parse_args --only-monthly accepted"
 # _parse_args: period options can combine with --only-* output options.
 _parse_args --only-weekly --only-percent
 assert_eq "weekly" "$only_period" "_parse_args --only-weekly --only-percent period"
-assert_eq "percent" "$only_mode" "_parse_args --only-weekly --only-percent mode"
+assert_eq "percent" "$only_style" "_parse_args --only-weekly --only-percent mode"
 
 # _parse_args: --only-* options remain mutually exclusive with each other.
 assert_args_fail() {
@@ -249,14 +249,14 @@ assert_args_fail "_parse_args rejects removed --percent option" --percent
 # _render_output helpers set the shared-state globals before each call.
 # shellcheck disable=SC2034  # these globals are consumed by _render_output
 _setup_render_output() {
-    mode="$1"
+    display="$1"
     color_mode="$2"
     width="$3"
     one_line="$4"
     date_mode="$5"
     numbers_mode="$6"
     bar_style="$7"
-    only_mode="$8"
+    only_style="$8"
     only_period="$9"
 }
 
