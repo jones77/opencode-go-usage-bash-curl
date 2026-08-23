@@ -28,18 +28,19 @@ Options:
   -p, --plain     force plain output (no color)
   -s, --short     compact output: <percent> <short-date>
   -1, --one-line  print all values on one line, comma-separated
+  -d, --date      prefix each output line with a local ISO timestamp
   -w N, --width=N bar width, 0-13 (default: 8, 0 for -s/-1)
 
 By default, color is used only when stdout is a terminal.
---one-line joins the three period lines with ", ".
--s and -1 default to --width=0 (no bar); add -wN to show one.
+--date uses the local time (YYYY-MM-DDTHH:MM:SS[.mmm]); milliseconds are
+included when GNU date semantics are available.
 
-The progress bar shows -wN cells.  Each cell has 8 steps:
+The progress bar shows -wN cells.  Each cell has 8 steps (and an empty cell):
 
     ⎼▁▂▃▄▅▆▇█
     012345678
 
-Use --width=N (0-13) to change the width; 0 suppresses the bar.
+13 is the maximum width because OpenCode Go's API doesn't use decimals.
 
   Width  One step    One cell  50% bar
      13   0.9615%     7.6923%  $(_bar 50 13)
@@ -67,6 +68,16 @@ _date() {
     else
         date "$@"
     fi
+}
+
+_iso_timestamp() {
+    local ts
+    ts=$(_date +%Y-%m-%dT%H:%M:%S.%3N 2>/dev/null) || true
+    if [[ -z "$ts" ]] || [[ "$ts" == *%3N* ]]
+    then
+        ts=$(_date +%Y-%m-%dT%H:%M:%S)
+    fi
+    printf '%s' "$ts"
 }
 
 _cache_file() {
@@ -344,7 +355,7 @@ _format_entry() {
 }
 
 _render_output() {
-    local mode="$1" color_mode="$2" width="$3" one_line="$4"
+    local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5"
 
     local use_color=false
     case "$color_mode" in
@@ -356,6 +367,12 @@ _render_output() {
     local short_mode=false
     [ "$mode" = "short" ] && short_mode=true
 
+    local timestamp=""
+    if "$date_mode"
+    then
+        timestamp="$(_iso_timestamp) "
+    fi
+
     local period percent timedate joined=""
     while IFS=, read -r period percent timedate
     do
@@ -365,13 +382,13 @@ _render_output() {
         then
             joined="${joined:+$joined, }$line"
         else
-            printf '%s\n' "$line"
+            printf '%s\n' "${timestamp}${line}"
         fi
     done
 
     if "$one_line" && [[ -n "$joined" ]]
     then
-        printf '%s\n' "$joined"
+        printf '%s\n' "${timestamp}${joined}"
     fi
 }
 
@@ -380,6 +397,7 @@ _main() {
     color_mode="auto"
     width=""
     one_line=false
+    date_mode=false
 
     while (( $# > 0 ))
     do
@@ -393,6 +411,7 @@ _main() {
             -w*)          width="${1#-w}"      ;;  # eg -w12
             -s|--short)   mode="short"         ;;
             -1|--one-line) one_line=true        ;;
+            -d|--date)    date_mode=true       ;;
             -p|--plain)   color_mode="plain"   ;;
             -c|--color)   color_mode="color"   ;;
             -h|--help)    _usage; exit 0         ;;
@@ -420,8 +439,8 @@ _main() {
     [ "$mode" = "short" ] && [ "$one_line" = true ] && \
         _exit_fail "--short and --one-line are mutually exclusive"
 
-    # local mode="$1" color_mode="$2" width="$3" one_line="$4"
-    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line"
+    # local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5"
+    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line" "$date_mode"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
