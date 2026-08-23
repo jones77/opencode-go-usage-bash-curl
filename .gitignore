@@ -1,2 +1,4 @@
 .env
 .opencode-go-usage-cache
+*.swp
+Session.vim

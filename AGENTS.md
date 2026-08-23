@@ -79,3 +79,27 @@ The test file sources the main script through the entry-point guard
 and runs a small built-in harness.
 Avoid brittle full-layout tests;
 focus on cells, steps, and other deterministic internals.
+
+## Terminal rendering assumptions
+
+All characters used for progress bars and help-text diagrams
+(including box-drawing/block-fill glyphs such as `█`, `▄`, `▌`, `▁`,
+`░`, `▒`, `▓`, and the empty marker `␣`) are assumed to render as
+**single-width** glyphs in the target terminal.
+Do not introduce characters whose display width depends on locale or
+terminal configuration (for example, CJK codepoints or other
+ambiguous-width characters); keep every output character single-width
+so that `printf` field widths align visually.
+
+Note also that `bash`/`coreutils` `printf` field widths count **bytes**,
+not characters. The glyphs above are 3-byte UTF-8 characters, so a
+width specifier like `%-17s` pads to 17 bytes, not 17 characters.
+When aligning multibyte output, compute padding explicitly (e.g. with
+`%*s` and a character-based count) rather than relying on `%Ns`.
+
+## OpenSpec
+
+This repo is intentionally kept as a single self-contained shell script.
+We do not maintain an `openspec/changes/` directory for refactors that stay
+within `opencode-go-usage.sh`; such changes are treated as a direct-user-override
+of the usual OpenSpec gate.

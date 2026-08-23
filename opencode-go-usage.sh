@@ -2,6 +2,7 @@
 # Print OpenCode Go usage numbers from
 #   http://opencode.ai/workspace/wrk_workspace_id/go
 # Expects a .env file with OPENCODE_GO_API_KEY=key in it.
+# Depends on python3.
 set -euo pipefail
 
 readonly progname="$(basename "${BASH_SOURCE[0]}")"
@@ -23,61 +24,72 @@ Usage: $progname [options]
 Print OpenCode Go usage numbers and reset times.
 
 Options:
-  -h, --help      show this help
-  -c, --color     force colored output
-  -p, --plain     force plain output (no color)
-  -s, --short     compact output: <percent> <short-date>
-  -1, --one-line  print all values on one line, comma-separated
-  -d, --date      prefix each output line with a local ISO timestamp
-  -w N, --width=N bar width, 0-13 (default: 8, 0 for -s/-1)
+  -h, --help       show this help
+  -c, --color      force colored output
+  -p, --plain      force plain output (no color)
+  -d, --date       prefix each output line with a local ISO timestamp
+  -n, --numbers    omit '%' and show seconds remaining instead of duration
+  -1, --one-line   print all values on one line, comma-separated
+  -s, --short      compact output: <percent> <short-date>
+  --only-bar       show only the progress bar
+  --only-percent   show only the percent value
+  --only-datetime  show only the reset time / duration
+  -g, --gradient   gradient shade bar style
+  -v, --vertical   vertical bar style (default)
+  -z, --horizontal horizontal bar style
+  -w N, --width=N  bar width, 0-13 (default: 8; 0 when no bar is drawn)
 
 By default, color is used only when stdout is a terminal.
---date uses the local time (YYYY-MM-DDTHH:MM:SS[.mmm]); milliseconds are
-included when GNU date semantics are available.
+  --date uses the local time (YYYY-MM-DDTHH:MM:SS).
+  --only-bar, --only-percent, and --only-datetime are mutually exclusive
+  with each other.
+Bar styles (-v/-z/-g) are mutually exclusive; -v is the default.
 
-The progress bar shows -wN cells.  Each cell has 8 steps (and an empty cell):
-
-    ⎼▁▂▃▄▅▆▇█
-    012345678
+The -g, gradient bar uses four shades with 4 steps per cell:        ␣░▒▓█
+                                                                    01234
+The default vertical bar fills bottom-to-top with 8 steps per cell:  ␣▁▂▃▄▅▆▇█
+                                                                    012345678
+The -z, horizontal bar fills left-to-right with 8 steps per cell:   ␣▏▎▍▌▋▊▉█
+                                                                    012345678
+All include an empty cell: ␣
 
 13 is the maximum width because OpenCode Go's API doesn't use decimals.
 
-  Width  One step    One cell  50% bar
-     13   0.9615%     7.6923%  $(_bar 50 13)
-     12   1.0417%     8.3333%  $(_bar 50 12)
-     11   1.1364%     9.0909%  $(_bar 50 11)
-     10   1.25%       10%      $(_bar 50 10)
-      9   1.3889%     11.1111% $(_bar 50 9)
-      8   1.5625%     12.5%    $(_bar 50 8)
-      7   1.7857%     14.2857% $(_bar 50 7)
-      6   2.0833%     16.6667% $(_bar 50 6)
-      5   2.5%        20%      $(_bar 50 5)
-      4   3.125%      25%      $(_bar 50 4)
-      3   4.1667%     33.3333% $(_bar 50 3)
-      2   6.25%       50%      $(_bar 50 2)
-      1  12.5%       100%      $(_bar 50 1)
+  Width  One step   One cell  50% -v/--vertical  50% -z/--horizontal
+$(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
+  do
+      case "$ww" in
+          13) step="0.9615"; cell="7.6923" ;;
+          12) step="1.0417"; cell="8.3333" ;;
+          11) step="1.1364"; cell="9.0909" ;;
+          10) step="1.25";   cell="10" ;;
+          9)  step="1.3889"; cell="11.1111" ;;
+          8)  step="1.5625"; cell="12.5" ;;
+          7)  step="1.7857"; cell="14.2857" ;;
+          6)  step="2.0833"; cell="16.6667" ;;
+          5)  step="2.5";    cell="20" ;;
+          4)  step="3.125";  cell="25" ;;
+          3)  step="4.1667"; cell="33.3333" ;;
+          2)  step="6.25";   cell="50" ;;
+          1)  step="12.5";   cell="100" ;;
+      esac
+      vbar="$(_bar 50 "$ww" vertical)"
+      hbar="$(_bar 50 "$ww" horizontal)"
+      # printf field widths count bytes, but the bar glyphs are 3-byte UTF-8
+      # characters, so pad manually to a 17-character field.
+      printf '  %5d  %7.4f%% %9.4f%%  %s%*s  %s%*s\n' \
+                "$ww" "$step" "$cell" \
+                "$vbar" $((17 - ww)) '' \
+                "$hbar" $((17 - ww)) ''
+  done)
+
+At width 13 one step is 1.92%; rendering uses integer math, so the
+recurring decimal only appears in this description.
 EOF
 }
 
-_date() {
-    # use gdate if it exists
-    if gdate >/dev/null 2>&1
-    then
-        # FIXME: I don't think this worked on Mac when I tried it.
-        gdate "$@"
-    else
-        date "$@"
-    fi
-}
-
 _iso_timestamp() {
-    local ts
-    ts=$(_date +%Y-%m-%dT%H:%M:%S.%3N 2>/dev/null) || true
-    if [[ -z "$ts" ]] || [[ "$ts" == *%3N* ]]
-    then
-        ts=$(_date +%Y-%m-%dT%H:%M:%S)
-    fi
-    printf '%s' "$ts"
+    printf '%s' "$(date +%Y-%m-%dT%H:%M:%S)"
 }
 
 _cache_file() {
@@ -110,6 +122,28 @@ readonly -A period_label=(
     [monthly]="monthly"
 )
 
+# Option metadata used by _parse_args. getopts consumes the optstring; the
+# long_alias map lets the long-option loop dispatch through _apply_option.
+readonly _optstring=":hcpdn1svzgw:"
+
+# shellcheck disable=SC2154  # associative-array keys, not variables
+readonly -A _long_alias=(
+    [color]=c
+    [date]=d
+    [gradient]=g
+    [help]=h
+    [horizontal]=z
+    [numbers]=n
+    [one-line]=1
+    [plain]=p
+    [short]=s
+    [vertical]=v
+    [width]=w
+)
+readonly -A _takes_arg=(
+    [w]=1
+)
+
 _format_duration() {
     declare -A args=(
         [d]=$1
@@ -117,7 +151,7 @@ _format_duration() {
         [m]=$3
         [s]=$4
     )
-    string=
+    local string=
     for unit in "d" "h" "m" "s"
     do
         local value=${args[$unit]}
@@ -133,12 +167,30 @@ _format_duration() {
     echo "$string"
 }
 
+# Portable ISO-8601 -> seconds-until-target.  Uses python3 so we don't
+# depend on GNU date -d.  Naive strings are interpreted as UTC.
+_seconds_until_iso() {
+    python3 -c '
+import sys, datetime
+s = sys.argv[1]
+if s.endswith("Z"):
+    s = s[:-1] + "+00:00"
+try:
+    dt = datetime.datetime.fromisoformat(s)
+except ValueError as e:
+    sys.exit(f"failed to parse ISO timestamp {s!r}: {e}")
+if dt.tzinfo is None:
+    dt = dt.replace(tzinfo=datetime.timezone.utc)
+now = datetime.datetime.now(datetime.timezone.utc)
+print(int((dt - now).total_seconds()))
+' "$1"
+}
+
 _duration_from_iso8601() {
     local iso8601_date="$1"
 
-    local target_seconds=$(_date -d "$iso8601_date" +%s)
-    local now_seconds=$(_date +%s)
-    local diff=$((target_seconds - now_seconds))
+    local diff
+    diff=$(_seconds_until_iso "$iso8601_date")
 
     (( diff < 0 )) && _exit_fail "unexpected negative diff='$diff'"
 
@@ -181,40 +233,47 @@ _human_readable_short() {
 _bar() {
     local percent="$1"
     local width="$2"
+    local style="${3:-vertical}"
 
-    # Total eighth-steps, split into full cells + the partial step.
+    local steps_per_cell empty full
+    local -a partial
+    empty="␣"
+    full="█"
+    case "$style" in
+          gradient) steps_per_cell=4; partial=(░ ▒ ▓) ;;
+        horizontal) steps_per_cell=8; partial=(▏ ▎ ▍ ▌ ▋ ▊ ▉) ;;
+          vertical) steps_per_cell=8; partial=(▁ ▂ ▃ ▄ ▅ ▆ ▇) ;;
+                 *) _exit_fail "unknown bar style: '$style'" ;;
+    esac
+
+    # Total sub-steps, split into full cells + the partial step.
     # Integer division truncates down so we never show a step we haven't reached.
-    local total=$(( percent * width * 8 / 100 ))
-    local int=$((   total / 8 ))
-    local steps=$(( total % 8 ))
+    local total=$(( percent * width * steps_per_cell / 100 ))
+    local int=$((   total / steps_per_cell ))
+    local steps=$(( total % steps_per_cell ))
 
     if (( int > width )) # Clamp in case the API ever returns >100%.
     then
         int=$width
     fi
 
-    local empty="⎼"
     local last=""
     local remaining=$(( width - int ))
     if (( remaining > 0 ))
     then
-        case $steps in
-            0) last="$empty" ;;
-            1) last="▁" ;;
-            2) last="▂" ;;
-            3) last="▃" ;;
-            4) last="▄" ;;
-            5) last="▅" ;;
-            6) last="▆" ;;
-            7) last="▇" ;;
-        esac
+        if (( steps == 0 ))
+        then
+            last="$empty"
+        else
+            last="${partial[$((steps - 1))]}"
+        fi
         remaining=$(( remaining - 1 ))
     fi
 
     local i
     for (( i = 0; i < int; i++ ))
     do
-        printf "%s" "█"
+        printf "%s" "$full"
     done
     printf "%s" "$last"
     for (( i = 0; i < remaining; i++ ))
@@ -267,11 +326,22 @@ _fetch_api() {
         exit 1
     fi
 
+    # Keep the bearer token out of curl's argv (visible via ps) by reading the
+    # Authorization header from a short-lived, restricted temp file.
+    local auth_header_file
+    auth_header_file=$(mktemp "${TMPDIR:-/tmp}/opencode-go-usage-auth.XXXXXX")
+    # shellcheck disable=SC2064  # $auth_header_file expanded here intentionally
+    trap "rm -f '$auth_header_file'" EXIT
+    (umask 077; printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" > "$auth_header_file")
+
     readonly response=$(curl \
         -s -w "%{http_code}" -X GET "https://opencode.ai/zen/go/v1/usage" \
-        -H "Authorization: Bearer $OPENCODE_GO_API_KEY" \
+        -H "@$auth_header_file" \
         -H "Accept: application/json"
     )
+
+    trap - EXIT
+    rm -f "$auth_header_file"
 
     readonly http_status="${response:${#response}-3}"
     readonly body="${response:0:${#response}-3}"
@@ -301,7 +371,7 @@ _load_lines() {
     local cache_file
     cache_file=$(_cache_file)
     local now mtime=0
-    now=$(_date +%s)
+    now=$(date +%s)
 
     if [[ -f "$cache_file" ]]
     then
@@ -318,7 +388,9 @@ _load_lines() {
 }
 
 _format_entry() {
-    local period="$1" percent="$2" timedate="$3" short_mode="$4" one_line="$5" width="$6" use_color="$7"
+    local period="$1" percent="$2" duration_text="$3" short_mode="$4" \
+        one_line="$5" width="$6" use_color="$7" numbers_mode="$8" \
+        bar_style="${9}" only_mode="${10}"
 
     local short_period="${period_label[$period]}"
     [[ -n "$short_period" ]] || _exit_fail "unexpected period: '$period'"
@@ -333,29 +405,77 @@ _format_entry() {
     local bar_part=""
     if (( width > 0 ))
     then
-        bar_part=" $(_bar "$percent" "$width")"
+        bar_part=" $(_bar "$percent" "$width" "$bar_style")"
     fi
 
-    local duration
+    case "$only_mode" in
+        bar)
+            printf "%s%s%s" \
+                "$color_esc" "$(_bar "$percent" "$width" "$bar_style")" "$reset_esc"
+            return
+            ;;
+        percent)
+            local pfmt="%.0f"
+            if "$one_line" && "$use_color"
+            then
+                pfmt="%3.0f"
+            fi
+            # Use "%%" so printf prints a literal "%"; a bare "%" would be
+            # interpreted as the start of another conversion specifier.
+            local suffix="%%"
+            if "$numbers_mode"
+            then
+                suffix=""
+            fi
+            printf "%s${pfmt}${suffix}%s" \
+                "$color_esc" "$percent" "$reset_esc"
+            return
+            ;;
+        datetime)
+            local dfmt="%s"
+            if "$one_line" && "$use_color"
+            then
+                dfmt="%6s"
+            fi
+            printf "%s${dfmt}%s" "$color_esc" "$duration_text" "$reset_esc"
+            return
+            ;;
+    esac
+
+    local prefix="" pfmt="%.0f" dfmt="%s"
     if "$short_mode"
     then
-        duration=$(_human_readable_short "$timedate")
-        printf "%s%2.0f%%%s %s%s" \
-            "$color_esc" "$percent" "$bar_part" "$duration" "$reset_esc"
+        pfmt="%2.0f"
+        dfmt="%7s"
     elif "$one_line"
     then
-        duration=$(_human_readable_short "$timedate")
-        printf "%s%.0f%%%s %s%s" \
-            "$color_esc" "$percent" "$bar_part" "$duration" "$reset_esc"
+        if "$use_color"
+        then
+            pfmt="%3.0f"
+            dfmt="%6s"
+        fi
     else
-        duration=$(_human_readable "$timedate")
-        printf "%s%7s %2.0f%%%s %s%s" \
-            "$color_esc" "$short_period" "$percent" "$bar_part" "$duration" "$reset_esc"
+        prefix=$(printf '%7s ' "$short_period")
+        pfmt="%2.0f"
     fi
+
+    # Use "%%" so printf prints a literal "%"; a bare "%" would be
+    # interpreted as the start of another conversion specifier.
+    local suffix="%%"
+    if "$numbers_mode"
+    then
+        suffix=""
+    fi
+
+    # shellcheck disable=SC2059
+    # pfmt/dfmt/suffix are controlled format fragments, not user input.
+    printf "%s%s${pfmt}${suffix}%s ${dfmt}%s" \
+        "$color_esc" "$prefix" "$percent" "$bar_part" "$duration_text" "$reset_esc"
 }
 
 _render_output() {
-    local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5"
+    local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5" \
+        numbers_mode="$6" bar_style="$7" only_mode="$8"
 
     local use_color=false
     case "$color_mode" in
@@ -373,11 +493,33 @@ _render_output() {
         timestamp="$(_iso_timestamp) "
     fi
 
+    local bar_width=$width
+    if [ "$only_mode" = "percent" ] || [ "$only_mode" = "datetime" ]
+    then
+        bar_width=0
+    fi
+
     local period percent timedate joined=""
     while IFS=, read -r period percent timedate
     do
+        local duration_text
+        if [ "$only_mode" = "bar" ] || [ "$only_mode" = "percent" ]
+        then
+            duration_text=""
+        elif "$numbers_mode"
+        then
+            duration_text=$(_seconds_until_iso "$timedate")
+        elif "$short_mode" || "$one_line"
+        then
+            duration_text=$(_human_readable_short "$timedate")
+        else
+            duration_text=$(_human_readable "$timedate")
+        fi
+
         local line
-        line=$(_format_entry "$period" "$percent" "$timedate" "$short_mode" "$one_line" "$width" "$use_color")
+        line=$(_format_entry "$period" "$percent" "$duration_text" \
+            "$short_mode" "$one_line" "$bar_width" "$use_color" \
+            "$numbers_mode" "$bar_style" "$only_mode")
         if "$one_line"
         then
             joined="${joined:+$joined, }$line"
@@ -392,46 +534,186 @@ _render_output() {
     fi
 }
 
-_main() {
+_apply_option() {
+    local short="$1" arg="${2:-}"
+    case "$short" in
+        h) _usage; exit 0 ;;
+        c) color_mode="color" ;;
+        p) color_mode="plain" ;;
+        d) date_mode=true ;;
+        n) numbers_mode=true ;;
+        1) one_line=true ;;
+        s) mode="short" ;;
+        v|z|g)
+            if [[ "$bar_style_set" == true ]]
+            then
+                _exit_fail "bar styles are mutually exclusive"
+            fi
+            case "$short" in
+                v) bar_style="vertical" ;;
+                z) bar_style="horizontal" ;;
+                g) bar_style="gradient" ;;
+            esac
+            bar_style_set=true
+            ;;
+        w) width="$arg" ;;
+        *) _exit_fail "unknown option: -$short" ;;
+    esac
+}
+
+_set_only_mode() {
+    local new="$1"
+    if [[ "$only_mode" != "none" ]]
+    then
+        _exit_fail "--only-* options are mutually exclusive"
+    fi
+    only_mode="$new"
+}
+
+_parse_args() {
     mode="full"
     color_mode="auto"
     width=""
     one_line=false
     date_mode=false
+    numbers_mode=false
+    bar_style="vertical"
+    bar_style_set=false
+    only_mode="none"
 
+    # Separate short and long options before dispatching. Only -w/--width
+    # take values, so those two forms must consume their following argument.
+    local -a short_args=()
+    local -a long_args=()
     while (( $# > 0 ))
     do
         case "$1" in
-            --width=*) width="${1#--width=}" ;;
-            --width)   _exit_fail "--width requires a value (use --width=N)" ;;
-            -w) (( $# < 2 )) && _exit_fail "-w requires a value"  # eg -w 12
-                width="$2"
+            --width)
+                if (( $# < 2 ))
+                then
+                    _exit_fail "--width requires a value"
+                fi
+                long_args+=("$1" "$2")
+                shift 2
+                ;;
+            --width=*|--*)
+                long_args+=("$1")
                 shift
                 ;;
-            -w*)          width="${1#-w}"      ;;  # eg -w12
-            -s|--short)   mode="short"         ;;
-            -1|--one-line) one_line=true        ;;
-            -d|--date)    date_mode=true       ;;
-            -p|--plain)   color_mode="plain"   ;;
-            -c|--color)   color_mode="color"   ;;
-            -h|--help)    _usage; exit 0         ;;
+            -w)
+                if (( $# < 2 ))
+                then
+                    _exit_fail "-w requires a value"
+                fi
+                short_args+=("$1" "$2")
+                shift 2
+                ;;
+            -*)
+                if [[ "$1" == "-" ]]
+                then
+                    _usage
+                    _exit_fail "unknown argument: '-'"
+                fi
+                short_args+=("$1")
+                shift
+                ;;
             *)
                 _usage
                 _exit_fail "unknown argument: '$1'"
                 ;;
         esac
-        shift
     done
+
+    local OPTIND=1
+    local OPTARG=""
+    local opt
+    while getopts "$_optstring" opt "${short_args[@]}"
+    do
+        case "$opt" in
+            \?)
+                _exit_fail "unknown option: -$OPTARG"
+                ;;
+            :)
+                _exit_fail "-$OPTARG requires a value"
+                ;;
+            *)
+                if [[ -n "${_takes_arg[$opt]:-}" ]]
+                then
+                    _apply_option "$opt" "$OPTARG"
+                else
+                    _apply_option "$opt"
+                fi
+                ;;
+        esac
+    done
+
+    set -- "${long_args[@]}"
+    while (( $# > 0 ))
+    do
+        local arg="$1"
+        shift
+        case "$arg" in
+            --width=*)
+                width="${arg#--width=}"
+                ;;
+            --width)
+                if (( $# == 0 ))
+                then
+                    _exit_fail "--width requires a value"
+                fi
+                _apply_option "w" "$1"
+                shift
+                ;;
+            --only-bar)
+                _set_only_mode "bar"
+                ;;
+            --only-percent)
+                _set_only_mode "percent"
+                ;;
+            --only-datetime)
+                _set_only_mode "datetime"
+                ;;
+            --*)
+                local name="${arg#--}"
+                local short
+                short="${_long_alias[$name]:-}"
+                if [[ -z "$short" ]]
+                then
+                    _usage
+                    _exit_fail "unknown argument: '$arg'"
+                fi
+                if [[ -n "${_takes_arg[$short]:-}" ]]
+                then
+                    if (( $# == 0 ))
+                    then
+                        _exit_fail "--$name requires a value"
+                    fi
+                    _apply_option "$short" "$1"
+                    shift
+                else
+                    _apply_option "$short"
+                fi
+                ;;
+        esac
+    done
+}
+
+_main() {
+    _parse_args "$@"
 
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
-        if [ "$mode" = "short" ] || [ "$one_line" = true ]
+        if [ "$mode" = "short" ] || [ "$one_line" = true ] || \
+           [ "$only_mode" = "percent" ] || [ "$only_mode" = "datetime" ]
         then
             width=0
         else
             width=8
         fi
     fi
+
+    [[ "$width" =~ ^[0-9]+$ ]] || \
+        _exit_fail "width must be a number (got '$width')"
 
     (( width < 0 || width > 13 )) && \
         _exit_fail "width must be between 0 and 13 (got '$width')"
@@ -440,7 +722,9 @@ _main() {
         _exit_fail "--short and --one-line are mutually exclusive"
 
     # local mode="$1" color_mode="$2" width="$3" one_line="$4" date_mode="$5"
-    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line" "$date_mode"
+    # local numbers_mode="$6" bar_style="$7" only_mode="$8"
+    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line" \
+        "$date_mode" "$numbers_mode" "$bar_style" "$only_mode"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
