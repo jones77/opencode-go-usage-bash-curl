@@ -28,6 +28,7 @@ Options:
   -c, --color    force colored output (default when a terminal detected)
   -p, --plain    force plain output (no color)
   -d, --date     prefix each output line with a local ISO timestamp
+  -f, --force    bypass the cache; always fetch from the API (and refresh the cache)
   -n, --numbers  omit '%' and show seconds remaining instead of duration
   -1, --one-line print all values on one line, comma-separated
   -s, --short    compact output: <percent> <short-date>
@@ -130,12 +131,13 @@ readonly -A period_label=(
 
 # Option metadata used by _parse_args. getopts consumes the optstring; the
 # long_alias map lets the long-option loop dispatch through _apply_option.
-readonly _optstring=":hcpdn1svzgw:"
+readonly _optstring=":hcpdn1svzgw:f"
 
 # shellcheck disable=SC2154  # associative-array keys, not variables
 readonly -A _long_alias=(
     [color]=c
     [date]=d
+    [force]=f
     [gradient]=g
     [help]=h
     [horizontal]=z
@@ -382,7 +384,7 @@ _load_lines() {
         mtime=${mtime:-0}
     fi
 
-    if (( now - mtime < cache_filename_ttl ))  # cache_filename TTL seconds
+    if [[ "$force" != true ]] && (( now - mtime < cache_filename_ttl ))
     then
         _read_cache "$cache_file"
     else
@@ -483,6 +485,7 @@ _apply_option() {
         c) color_mode="color" ;;
         p) color_mode="plain" ;;
         d) date_mode=true ;;
+        f) force=true ;;
         n) numbers_mode=true ;;
         1) one_line=true ;;
         s) display="short" ;;
@@ -525,6 +528,7 @@ _set_only_period() {
 #       bar_style_set   true | false
 #       only_style      "none" | "bar" | "percent" | "datetime"
 #       only_period     "all" | "rolling" | "weekly" | "monthly"
+#       force           true | false
 display="full"
 color_mode="auto"
 width=""
@@ -535,6 +539,7 @@ bar_style="vertical"
 bar_style_set=false
 only_style="none"
 only_period="all"
+force=false
 
 _parse_args() {
     # Reset shared-state globals to defaults on each invocation so repeated
@@ -549,6 +554,7 @@ _parse_args() {
     bar_style_set=false
     only_style="none"
     only_period="all"
+    force=false
 
     # Separate short and long options before dispatching. Only -w/--width
     # take values, so those two forms must consume their following argument.

@@ -186,6 +186,17 @@ assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
     "$(_format_entry "rolling" 50 "12345" false true 0 true false "vertical" "datetime")" \
     "_format_entry only datetime one-line color aligned"
 
+# _parse_args: --force / -f sets force=true; default is false.
+_parse_args
+# shellcheck disable=SC2154  # force is set by _parse_args
+assert_eq "false" "$force" "_parse_args default force is false"
+
+_parse_args --force
+assert_eq "true" "$force" "_parse_args --force sets force=true"
+
+_parse_args -f
+assert_eq "true" "$force" "_parse_args -f sets force=true"
+
 # _parse_args: --only-* options can be combined with --short and --one-line.
 display=""
 only_style=""
