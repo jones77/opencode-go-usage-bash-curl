@@ -11,12 +11,12 @@ cd "$progdir" || exit 1
 readonly cache_filename=".opencode-go-usage-cache"
 readonly cache_filename_ttl=120
 
-exit_fail() {
+_exit_fail() {
     echo "$progname: error: $*" >&2
     exit 1
 }
 
-usage() {
+_usage() {
     cat <<EOF
 Usage: $progname [options]
 
@@ -99,7 +99,7 @@ readonly -A period_label=(
     [monthly]="monthly"
 )
 
-format_duration() {
+_format_duration() {
     declare -A args=(
         [d]=$1
         [h]=$2
@@ -129,7 +129,7 @@ _duration_from_iso8601() {
     local now_seconds=$(_date +%s)
     local diff=$((target_seconds - now_seconds))
 
-    (( diff < 0 )) && exit_fail "unexpected negative diff='$diff'"
+    (( diff < 0 )) && _exit_fail "unexpected negative diff='$diff'"
 
     local days=$((    diff / 86400))
     local hours=$(((  diff % 86400) / 3600))
@@ -139,14 +139,14 @@ _duration_from_iso8601() {
     echo "$days" "$hours" "$minutes" "$seconds"
 }
 
-human_readable() {
+_human_readable() {
     local days hours minutes seconds
     read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
 
-    format_duration "$days" "$hours" "$minutes" "$seconds"
+    _format_duration "$days" "$hours" "$minutes" "$seconds"
 }
 
-human_readable_short() {
+_human_readable_short() {
     local days hours minutes seconds
     read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
 
@@ -227,7 +227,7 @@ except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
 '
 }
 
-read_cache() {
+_read_cache() {
     local cache_file="$1"
     local period percent reset n=0 buf=""
     while IFS=, read -r period percent reset
@@ -238,18 +238,18 @@ read_cache() {
     done < "$cache_file"
 
     (( n != 3 )) && \
-        exit_fail "expected cache_file='$cache_file' to have 3 lines in it"
+        _exit_fail "expected cache_file='$cache_file' to have 3 lines in it"
 
     printf '%s' "$buf"
 }
 
-fetch_api() {
+_fetch_api() {
     local cache_file="$1"
 
     # need OPENCODE_GO_API_KEY to call the API, .env is in the .gitignore file
     # shellcheck source=/dev/null
     source .env \
-        || exit_fail "expected to source ./.env to get \$OPENCODE_GO_API_KEY"
+        || _exit_fail "expected to source ./.env to get \$OPENCODE_GO_API_KEY"
     if [ -z "$OPENCODE_GO_API_KEY" ]
     then
         echo "$progname: error: need a OPENCODE_GO_API_KEY environment variable." >&2
@@ -265,17 +265,17 @@ fetch_api() {
     readonly http_status="${response:${#response}-3}"
     readonly body="${response:0:${#response}-3}"
 
-    (( http_status != 200 )) && exit_fail \
+    (( http_status != 200 )) && _exit_fail \
         "API request failed with status: $http_status
 response: '$body'"
 
     local parsed
-    parsed=$(_parse_usage_json <<< "$body") || exit_fail "failed to parse API response"
+    parsed=$(_parse_usage_json <<< "$body") || _exit_fail "failed to parse API response"
 
     local line_count
     line_count=$(printf '%s\n' "$parsed" | wc -l)
     (( line_count != 3 )) && \
-        exit_fail "expected API response to contain 3 periods"
+        _exit_fail "expected API response to contain 3 periods"
 
     local tmp="$cache_file.$$"
     # shellcheck disable=SC2015  # atomic write: only keep tmp if printf && mv both succeed
@@ -286,7 +286,7 @@ response: '$body'"
     printf '%s\n' "$parsed"
 }
 
-load_lines() {
+_load_lines() {
     local cache_file
     cache_file=$(_cache_file)
     local now mtime=0
@@ -300,9 +300,9 @@ load_lines() {
 
     if (( now - mtime < cache_filename_ttl ))  # cache_filename TTL seconds
     then
-        read_cache "$cache_file"
+        _read_cache "$cache_file"
     else
-        fetch_api "$cache_file"
+        _fetch_api "$cache_file"
     fi
 }
 
@@ -310,7 +310,7 @@ _format_entry() {
     local period="$1" percent="$2" timedate="$3" short_mode="$4" one_line="$5" width="$6" use_color="$7"
 
     local short_period="${period_label[$period]}"
-    [[ -n "$short_period" ]] || exit_fail "unexpected period: '$period'"
+    [[ -n "$short_period" ]] || _exit_fail "unexpected period: '$period'"
 
     local color_esc="" reset_esc=""
     if "$use_color"
@@ -328,22 +328,22 @@ _format_entry() {
     local duration
     if "$short_mode"
     then
-        duration=$(human_readable_short "$timedate")
+        duration=$(_human_readable_short "$timedate")
         printf "%s%2.0f%%%s %s%s" \
             "$color_esc" "$percent" "$bar_part" "$duration" "$reset_esc"
     elif "$one_line"
     then
-        duration=$(human_readable_short "$timedate")
+        duration=$(_human_readable_short "$timedate")
         printf "%s%.0f%%%s %s%s" \
             "$color_esc" "$percent" "$bar_part" "$duration" "$reset_esc"
     else
-        duration=$(human_readable "$timedate")
+        duration=$(_human_readable "$timedate")
         printf "%s%7s %2.0f%%%s %s%s" \
             "$color_esc" "$short_period" "$percent" "$bar_part" "$duration" "$reset_esc"
     fi
 }
 
-render_output() {
+_render_output() {
     local mode="$1" color_mode="$2" width="$3" one_line="$4"
 
     local use_color=false
@@ -375,7 +375,7 @@ render_output() {
     fi
 }
 
-main() {
+_main() {
     mode="full"
     color_mode="auto"
     width=""
@@ -385,8 +385,8 @@ main() {
     do
         case "$1" in
             --width=*) width="${1#--width=}" ;;
-            --width)   exit_fail "--width requires a value (use --width=N)" ;;
-            -w) (( $# < 2 )) && exit_fail "-w requires a value"  # eg -w 12
+            --width)   _exit_fail "--width requires a value (use --width=N)" ;;
+            -w) (( $# < 2 )) && _exit_fail "-w requires a value"  # eg -w 12
                 width="$2"
                 shift
                 ;;
@@ -395,10 +395,10 @@ main() {
             -1|--one-line) one_line=true        ;;
             -p|--plain)   color_mode="plain"   ;;
             -c|--color)   color_mode="color"   ;;
-            -h|--help)    usage; exit 0         ;;
+            -h|--help)    _usage; exit 0         ;;
             *)
-                usage
-                exit_fail "unknown argument: '$1'"
+                _usage
+                _exit_fail "unknown argument: '$1'"
                 ;;
         esac
         shift
@@ -415,13 +415,16 @@ main() {
     fi
 
     (( width < 0 || width > 13 )) && \
-        exit_fail "width must be between 0 and 13 (got '$width')"
+        _exit_fail "width must be between 0 and 13 (got '$width')"
 
     [ "$mode" = "short" ] && [ "$one_line" = true ] && \
-        exit_fail "--short and --one-line are mutually exclusive"
+        _exit_fail "--short and --one-line are mutually exclusive"
 
     # local mode="$1" color_mode="$2" width="$3" one_line="$4"
-    load_lines | render_output "$mode" "$color_mode" "$width" "$one_line"
+    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
+then
+    _main "$@"
+fi
