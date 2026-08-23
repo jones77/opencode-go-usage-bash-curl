@@ -9,6 +9,7 @@ readonly progdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$progdir" || exit 1
 
 readonly cache_filename=".opencode-go-usage-cache"
+readonly cache_filename_ttl=120
 
 exit_fail() {
     echo "$progname: error: $*" >&2
@@ -84,19 +85,21 @@ _mtime_seconds() {
     stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null
 }
 
+# shellcheck disable=SC2154  # associative-array keys, not variables
 readonly -A period_color=(
     [rolling]=27
     [weekly]=28
     [monthly]=166
 )
 
+# shellcheck disable=SC2154  # associative-array keys, not variables
 readonly -A period_label=(
     [rolling]="rolling"
     [weekly]="weekly"
     [monthly]="monthly"
 )
 
-_format_duration() {
+format_duration() {
     declare -A args=(
         [d]=$1
         [h]=$2
@@ -140,7 +143,7 @@ human_readable() {
     local days hours minutes seconds
     read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
 
-    _format_duration "$days" "$hours" "$minutes" "$seconds"
+    format_duration "$days" "$hours" "$minutes" "$seconds"
 }
 
 human_readable_short() {
@@ -224,7 +227,7 @@ except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
 '
 }
 
-_read_cache() {
+read_cache() {
     local cache_file="$1"
     local period percent reset n=0 buf=""
     while IFS=, read -r period percent reset
@@ -240,10 +243,11 @@ _read_cache() {
     printf '%s' "$buf"
 }
 
-_fetch_api() {
+fetch_api() {
     local cache_file="$1"
 
     # need OPENCODE_GO_API_KEY to call the API, .env is in the .gitignore file
+    # shellcheck source=/dev/null
     source .env \
         || exit_fail "expected to source ./.env to get \$OPENCODE_GO_API_KEY"
     if [ -z "$OPENCODE_GO_API_KEY" ]
@@ -274,6 +278,7 @@ response: '$body'"
         exit_fail "expected API response to contain 3 periods"
 
     local tmp="$cache_file.$$"
+    # shellcheck disable=SC2015  # atomic write: only keep tmp if printf && mv both succeed
     printf '%s\n' "$parsed" > "$tmp" 2>/dev/null \
         && mv -f "$tmp" "$cache_file" 2>/dev/null \
         || rm -f "$tmp"
@@ -281,7 +286,7 @@ response: '$body'"
     printf '%s\n' "$parsed"
 }
 
-_load_lines() {
+load_lines() {
     local cache_file
     cache_file=$(_cache_file)
     local now mtime=0
@@ -293,11 +298,11 @@ _load_lines() {
         mtime=${mtime:-0}
     fi
 
-    if (( now - mtime < 120 ))  # cache_filename TTL seconds
+    if (( now - mtime < cache_filename_ttl ))  # cache_filename TTL seconds
     then
-        _read_cache "$cache_file"
+        read_cache "$cache_file"
     else
-        _fetch_api "$cache_file"
+        fetch_api "$cache_file"
     fi
 }
 
@@ -321,10 +326,15 @@ _format_entry() {
     fi
 
     local duration
-    if "$short_mode" || "$one_line"
+    if "$short_mode"
     then
         duration=$(human_readable_short "$timedate")
         printf "%s%2.0f%%%s %s%s" \
+            "$color_esc" "$percent" "$bar_part" "$duration" "$reset_esc"
+    elif "$one_line"
+    then
+        duration=$(human_readable_short "$timedate")
+        printf "%s%.0f%%%s %s%s" \
             "$color_esc" "$percent" "$bar_part" "$duration" "$reset_esc"
     else
         duration=$(human_readable "$timedate")
@@ -333,7 +343,7 @@ _format_entry() {
     fi
 }
 
-_render_output() {
+render_output() {
     local mode="$1" color_mode="$2" width="$3" one_line="$4"
 
     local use_color=false
@@ -366,53 +376,52 @@ _render_output() {
 }
 
 main() {
-    local mode="$1" color_mode="$2" width="$3" one_line="$4"
-    _load_lines | _render_output "$mode" "$color_mode" "$width" "$one_line"
+    mode="full"
+    color_mode="auto"
+    width=""
+    one_line=false
+
+    while (( $# > 0 ))
+    do
+        case "$1" in
+            --width=*) width="${1#--width=}" ;;
+            --width)   exit_fail "--width requires a value (use --width=N)" ;;
+            -w) (( $# < 2 )) && exit_fail "-w requires a value"  # eg -w 12
+                width="$2"
+                shift
+                ;;
+            -w*)          width="${1#-w}"      ;;  # eg -w12
+            -s|--short)   mode="short"         ;;
+            -1|--one-line) one_line=true        ;;
+            -p|--plain)   color_mode="plain"   ;;
+            -c|--color)   color_mode="color"   ;;
+            -h|--help)    usage; exit 0         ;;
+            *)
+                usage
+                exit_fail "unknown argument: '$1'"
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
+    then
+        if [ "$mode" = "short" ] || [ "$one_line" = true ]
+        then
+            width=0
+        else
+            width=8
+        fi
+    fi
+
+    (( width < 0 || width > 13 )) && \
+        exit_fail "width must be between 0 and 13 (got '$width')"
+
+    [ "$mode" = "short" ] && [ "$one_line" = true ] && \
+        exit_fail "--short and --one-line are mutually exclusive"
+
+    # local mode="$1" color_mode="$2" width="$3" one_line="$4"
+    load_lines | render_output "$mode" "$color_mode" "$width" "$one_line"
 }
 
-mode="full"
-color_mode="auto"
-width=""
-one_line=false
-
-while (( $# > 0 ))
-do
-    case "$1" in
-        --width=*) width="${1#--width=}" ;;
-        --width)   exit_fail "--width requires a value (use --width=N)" ;;
-        -w) (( $# < 2 )) && exit_fail "-w requires a value"  # eg -w 12
-            width="$2"
-            shift
-            ;;
-        -w*)          width="${1#-w}"      ;;  # eg -w12
-        -s|--short)   mode="short"         ;;
-        -1|--one-line) one_line=true        ;;
-        -p|--plain)   color_mode="plain"   ;;
-        -c|--color)   color_mode="color"   ;;
-        -h|--help)    usage; exit 0         ;;
-        *)
-            usage
-            exit_fail "unknown argument: '$1'"
-            ;;
-    esac
-    shift
-done
-
-# Default width: 0 for compact views, 8 otherwise.
-if [[ -z "$width" ]]
-then
-    if [ "$mode" = "short" ] || [ "$one_line" = true ]
-    then
-        width=0
-    else
-        width=8
-    fi
-fi
-
-(( width < 0 || width > 13 )) && \
-    exit_fail "width must be between 0 and 13 (got '$width')"
-
-[ "$mode" = "short" ] && [ "$one_line" = true ] && \
-    exit_fail "--short and --one-line are mutually exclusive"
-
-main "$mode" "$color_mode" "$width" "$one_line"
+main "$@"
