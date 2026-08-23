@@ -11,8 +11,8 @@
 
 All functions in this project are internal to a single self-contained script,
 so **every function name is prefixed with `_`** and uses `snake_case`.
-This includes the entry point, which is named `_main` and invoked only when
-the script is executed directly (not when sourced):
+This includes the entry point, which is named `_main`
+and invoked only when the script is executed directly (not when sourced):
 
 ```bash
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
@@ -21,8 +21,8 @@ then
 fi
 ```
 
-Keep helper functions small, use `local` for all function variables, and mark
-top-level constants `readonly`.
+Keep helper functions small, use `local` for all function variables,
+and mark top-level constants `readonly`.
 
 ## Control-flow style
 
@@ -59,20 +59,23 @@ It also avoids sprinkling semicolons through multi-line control structures.
 ## Formatting
 
 - Indent with 4 spaces.
-- Keep lines reasonably short; break long pipelines with `\` and a leading
-  pipe on continuation lines.
+- Keep lines 80 characters long;
+  break long pipelines with `\` and a leading pipe on continuation lines.
+  - But do not break hyperlinks, they can be as long as they need to be.
 - Do not use the `function` keyword; use `name() { ... }`.
 
 ## ShellCheck
 
-The script is expected to pass `shellcheck`. When a warning is a false
-positive or reflects an intentional pattern, add a suppression comment with
-a brief justification on the same line or immediately above the affected
-statement.
+The script is expected to pass `shellcheck`.
+When a warning is a false positive or reflects an intentional pattern,
+add a suppression comment with a brief justification on the same line
+or immediately above the affected statement.
 
 ## Testing
 
-Core, pure functions (especially the progress-bar `_bar` renderer) are tested
-in `test_opencode-go-usage.sh`. The test file sources the main script through
-the entry-point guard and runs a small built-in harness. Avoid brittle
-full-layout tests; focus on cells, steps, and other deterministic internals.
+Core, pure functions (especially the progress-bar `_bar` renderer)
+are tested in `test_opencode-go-usage.sh`.
+The test file sources the main script through the entry-point guard
+and runs a small built-in harness.
+Avoid brittle full-layout tests;
+focus on cells, steps, and other deterministic internals.
