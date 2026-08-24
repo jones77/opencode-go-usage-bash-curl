@@ -18,9 +18,8 @@ Results are cached locally for 120 seconds so repeated runs don't hit the API.
 - **curl**
 
 ## Screenshot
-
-<img width="1363" height="666" alt="image"
- src="https://github.com/user-attachments/assets/26264b0e-9602-4e67-b3c7-dbdae70184cb"
+<img width="1361" height="638" alt="Demonstration of --one-line mode and --vertical showing a poor man's usage over datetimestamp"
+ src="https://github.com/user-attachments/assets/9a3ee94a-faf4-4c19-9f28-5a34f05c369f"
 />
 
 ## Setup
