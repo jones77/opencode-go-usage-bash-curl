@@ -164,11 +164,9 @@ print(int((dt - now).total_seconds()))
 
 _duration_from_iso8601() {
     local iso8601_date="$1"
-
     local diff
     diff=$(_seconds_until_iso "$iso8601_date") \
         || _exit_fail "failed to parse ISO timestamp: $iso8601_date"
-
     (( diff < 0 )) && diff=0
 
     local days=$((    diff / 86400))
@@ -180,14 +178,13 @@ _duration_from_iso8601() {
 }
 
 _human_readable() {
-    local days hours minutes seconds
+    local   days hours minutes seconds
     read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
-
     _format_duration "$days" "$hours" "$minutes" "$seconds"
 }
 
 _human_readable_short() {
-    local days hours minutes seconds
+    local   days hours minutes seconds
     read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
 
     local parts=()
@@ -622,12 +619,12 @@ _parse_args() {
                 _apply_option "w" "$1"
                 shift
                 ;;
-            --only-bar)      _set_only_field "bar"       ;;
-            --only-percent)  _set_only_field "percent"   ;;
-            --only-datetime) _set_only_field "datetime"  ;;
-            --only-rolling)  _set_only_period "rolling" ;;
-            --only-weekly)   _set_only_period "weekly"  ;;
-            --only-monthly)  _set_only_period "monthly" ;;
+            --only-bar)      _set_only_field  "bar"      ;;
+            --only-percent)  _set_only_field  "percent"  ;;
+            --only-datetime) _set_only_field  "datetime" ;;
+            --only-rolling)  _set_only_period "rolling"  ;;
+            --only-weekly)   _set_only_period "weekly"   ;;
+            --only-monthly)  _set_only_period "monthly"  ;;
             --*)
                 local name="${arg#--}"
                 local short
@@ -708,7 +705,6 @@ _render_output() {
 
     "$one_line" && [[ -n "$joined" ]] && printf '%s\n' "${timestamp}${joined}"
 }
-
 
 _main() {
     _parse_args "$@"
