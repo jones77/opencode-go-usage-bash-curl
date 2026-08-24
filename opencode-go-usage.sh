@@ -671,7 +671,22 @@ _render_output() {
     case "$color_mode" in
         color) _use_color=true ;;
         plain) _use_color=false ;;
-        auto)  [[ -t 1 ]] && _use_color=true ;;
+        auto)
+            if [[ -n "${NO_COLOR:-}" ]]
+            then
+                _use_color=false
+            elif [[ "${TERM:-}" == "dumb" ]]
+            then
+                _use_color=false
+            elif [[ -t 1 ]]
+            then
+                _use_color=true
+            elif [[ -n "${CLICOLOR_FORCE:-}" \
+                    && "${CLICOLOR_FORCE}" != "0" ]]
+            then
+                _use_color=true
+            fi
+            ;;
     esac
 
     _short_mode=false
@@ -719,10 +734,7 @@ _render_output() {
         fi
     done
 
-    if "$one_line" && [[ -n "$joined" ]]
-    then
-        printf '%s\n' "${timestamp}${joined}"
-    fi
+    "$one_line" && [[ -n "$joined" ]] && printf '%s\n' "${timestamp}${joined}"
 }
 
 
