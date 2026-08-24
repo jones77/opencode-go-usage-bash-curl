@@ -11,6 +11,10 @@ Results are cached locally for 120 seconds so repeated runs don't hit the API.
 - **python3** (for ISO-8601 timestamp parsing and JSON handling)
 - **curl**
 
+## Screenshot
+
+<img width="1363" height="666" alt="image" src="https://github.com/user-attachments/assets/26264b0e-9602-4e67-b3c7-dbdae70184cb" />
+
 ## Setup
 
 Copy the example env file and fill in your API key:
