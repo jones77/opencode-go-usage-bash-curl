@@ -703,9 +703,7 @@ _render_output() {
     "$one_line" && [[ -n "$joined" ]] && printf '%s\n' "${timestamp}${joined}"
 }
 
-_main() {
-    _parse_args "$@"
-
+_validate_options() {
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
         if [[ "$display"    = "short"   || "$one_line"   = true
@@ -726,15 +724,13 @@ _main() {
     [[ "$display" = "short" && "$one_line" = true ]] \
         && _exit_fail "--short and --one-line are mutually exclusive"
 
-    [[ "$only_field" = "bar" \
-            && ( "$display" = "short" || "$one_line" = true ) ]] \
-        && _exit_fail \
-"--only-bar cannot be used with --short or --one-line (bar width would be 0)"
-
     [[ "$only_field" = "bar" && "$width" = "0" ]] \
-        && _exit_fail \
-"--only-bar cannot be used with -w 0 (bar would be empty)"
+        && _exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
+}
 
+_main() {
+    _parse_args "$@"
+    _validate_options
     _load_lines | _render_output
 }
 
