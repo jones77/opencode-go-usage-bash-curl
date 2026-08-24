@@ -365,20 +365,6 @@ _load_lines() {
     fi
 }
 
-_set_only_field() {
-    local new="$1"
-    [[ "$only_field" != "none" ]] \
-        && _exit_fail "--only-* options are mutually exclusive"
-    only_field="$new"
-}
-
-_set_only_period() {
-    local new="$1"
-    [[ "$only_period" != "all" ]] \
-        && _exit_fail "--only-rolling/-weekly/-monthly are mutually exclusive"
-    only_period="$new"
-}
-
 # Option metadata used by _parse_args. getopts consumes _optstring;
 # the long_alias map lets the long-option loop dispatch through _apply_option.
 readonly _optstring=":hcpdn1svzgw:f"
@@ -544,6 +530,20 @@ _apply_option() {
         w) width="$arg" ;;
         *) _exit_fail "unknown option: -$short" ;;
     esac
+}
+
+_set_only_field() {
+    local new="$1"
+    [[ "$only_field" != "none" ]] \
+        && _exit_fail "--only-* options are mutually exclusive"
+    only_field="$new"
+}
+
+_set_only_period() {
+    local new="$1"
+    [[ "$only_period" != "all" ]] \
+        && _exit_fail "--only-rolling/-weekly/-monthly are mutually exclusive"
+    only_period="$new"
 }
 
 _parse_args() {
@@ -722,8 +722,8 @@ _main() {
 
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
-        if [[ "$display" = "short" || "$one_line" = true || \
-           "$only_field" = "percent" || "$only_field" = "datetime" ]]
+        if [[ "$display"    = "short"   || "$one_line"   = true
+           || "$only_field" = "percent" || "$only_field" = "datetime" ]]
         then
             width=0
         else
