@@ -1,7 +1,7 @@
 # `opencode-go-usage.sh`
 
 A single-file shell script that fetches
-and displays your [OpenCode Go](https://opencode.ai) usage.
+and displays your [OpenCode Go](https://opencode.ai/go) usage.
 
 Results are cached locally for 120 seconds so repeated runs don't hit the API.
 
