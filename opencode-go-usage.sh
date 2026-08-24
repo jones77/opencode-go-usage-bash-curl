@@ -140,7 +140,7 @@ _format_duration() {
         printf -v string "$string%2s$unit" "$value"
     done
 
-    echo "$string"
+    echo "${string:-0s}"
 }
 
 # Portable ISO-8601 -> seconds-until-target.  Uses python3 so we don't
@@ -166,7 +166,8 @@ _duration_from_iso8601() {
     local iso8601_date="$1"
 
     local diff
-    diff=$(_seconds_until_iso "$iso8601_date")
+    diff=$(_seconds_until_iso "$iso8601_date") \
+        || _exit_fail "failed to parse ISO timestamp: $iso8601_date"
 
     (( diff < 0 )) && diff=0
 
@@ -292,14 +293,15 @@ _read_cache() {
 _fetch_api() {
     local cache_file="$1"
 
-
     # Save the current options and temporarily disable tracing
     # to keep the bearer token out of debug output.
     local saved_opts="$-"
     set +x +v
 
-    source .env \
+    source "$progdir/.env" \
         || _exit_fail "expected to source ./.env to get OPENCODE_GO_API_KEY"
+    [[ -n "${OPENCODE_GO_API_KEY:-}" ]] \
+        || _exit_fail ".env must define OPENCODE_GO_API_KEY"
     local curl_exit=0 response
     # Using `printf | curl` to prevent ps from seeing the API_KEY.
     response=$(printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" \

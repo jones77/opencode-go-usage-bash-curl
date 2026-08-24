@@ -135,7 +135,7 @@ for style in vertical horizontal gradient
 done
 
 # _format_duration: pure formatting logic.
-assert_eq ""                 "$(_format_duration 0 0 0 0)" "_format_duration all zero"
+assert_eq "0s"               "$(_format_duration 0 0 0 0)" "_format_duration all zero"
 assert_eq " 1d  2h  3m  4s"   "$(_format_duration 1 2 3 4)" "_format_duration 1d2h3m4s"
 assert_eq " 1h  1s"           "$(_format_duration 0 1 0 1)" "_format_duration skip zero units"
 assert_eq " 5d"              "$(_format_duration 5 0 0 0)" "_format_duration days only"

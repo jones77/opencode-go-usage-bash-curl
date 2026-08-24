@@ -2,3 +2,4 @@
 .opencode-go-usage-cache
 *.swp
 Session.vim
+vibe.log
