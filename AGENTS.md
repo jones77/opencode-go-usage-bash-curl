@@ -63,6 +63,14 @@ It also avoids sprinkling semicolons through multi-line control structures.
   break long pipelines with `\` and a leading pipe on continuation lines.
   - But do not break hyperlinks, they can be as long as they need to be.
 - Do not use the `function` keyword; use `name() { ... }`.
+- Place `||` and `&&` at the **start** of continuation lines, not at the end
+  of the preceding line. This makes the operators stand out visually:
+
+  ```bash
+  [[ -f "$file" ]] \
+      && process "$file" \
+      || skip "$file"
+  ```
 
 ## ShellCheck
 
