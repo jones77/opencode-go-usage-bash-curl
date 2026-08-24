@@ -36,7 +36,3 @@ bash test_opencode-go-usage.sh
 
 The test file sources the main script through the entry-point guard
 and runs a small built-in harness.
-
-## License
-
-[GNU Affero General Public License v3.0](LICENSE)
