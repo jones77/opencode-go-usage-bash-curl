@@ -8,7 +8,48 @@ Results are cached locally for 120 seconds so repeated runs don't hit the API.
 ## Usage
 
 ```bash
-./opencode-go-usage.sh --help
+$ ./opencode-go-usage.sh --help
+Usage: opencode-go-usage.sh [options]
+
+Print OpenCode Go usage numbers and reset times.
+
+Options:
+  -h, --help
+  -c, --color    force colored output (default when a terminal detected)
+  -p, --plain    force plain output (no color)
+  -d, --date     prefix each output line with a local ISO timestamp
+  -f, --force    bypass the cache; always fetch from the API (and refresh the cache)
+  -n, --numbers  omit '%' and show seconds remaining instead of duration
+  -1, --one-line print all values on one line, comma-separated
+  -s, --short    compact output: <percent> <short-date>
+Bar styles (-v/-z/-g) are mutually exclusive; -v is the default, ␣ means empty
+  -v,   --vertical   vertical bar style
+  -z,   --horizontal horizontal bar style
+  -g,   --gradient   gradient shade bar style
+  -w N, --width=N    0-13 (8 is the default; 0 means no bar is drawn)
+        --only-percent/-bar/-datetime
+            only show one field: percent remaining / progress bar /  reset time
+        --only-rolling/-weekly/-monthly
+           only show one period: rolling/weekly/monthly
+
+All styles use an empty cell, ␣.  The gradient bar uses four shades: ␣░▒▓█
+The default vertical bar fills bottom-to-top with 8 steps per cell:  ␣▁▂▃▄▅▆▇█
+The -z, horizontal bar fills left-to-right with 8 steps per cell:    ␣▏▎▍▌▋▊▉█
+
+  Width  One step   One cell  67% -v/--vertical  67% -z/--horizontal
+     13   0.9615%    7.6923%  ████████▅␣␣␣␣      ██████▌␣␣␣␣␣␣
+     12   1.0417%    8.3333%  ████████␣␣␣␣       ██████␣␣␣␣␣␣
+     11   1.1364%    9.0909%  ███████▂␣␣␣        █████▌␣␣␣␣␣
+     10   1.2500%   10.0000%  ██████▅␣␣␣         █████␣␣␣␣␣
+      9   1.3889%   11.1111%  ██████␣␣␣          ████▌␣␣␣␣
+      8   1.5625%   12.5000%  █████▂␣␣           ████␣␣␣␣
+      7   1.7857%   14.2857%  ████▅␣␣            ███▌␣␣␣
+      6   2.0833%   16.6667%  ████␣␣             ███␣␣␣
+      5   2.5000%   20.0000%  ███▂␣              ██▌␣␣
+      4   3.1250%   25.0000%  ██▅␣               ██␣␣
+      3   4.1667%   33.3333%  ██␣                █▌␣
+      2   6.2500%   50.0000%  █▂                 █␣
+      1  12.5000%  100.0000%  ▅                  ▌
 ```
 
 ## Dependencies
