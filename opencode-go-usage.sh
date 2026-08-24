@@ -382,14 +382,6 @@ readonly -A _long_alias=(
 #       only_period    "all" | "rolling" | "weekly" | "monthly"
 #       only_field     "none" | "bar" | "percent" | "datetime"
 #       width          bar width (numeric string), "" means "use default"
-#
-# Additional shared state set by render_output and consumed by format_entry:
-#
-#       _duration      formatted reset-time string
-#       _percent       current period percent (integer)
-#       _period        current period name ("rolling", "weekly", "monthly")
-#       _short_mode    true | false (derived from display)
-#       _use_color     true | false (derived from color_mode)
 bar_style="vertical"
 bar_style_set=false
 color_mode="auto"
@@ -402,20 +394,14 @@ only_period="all"
 only_field="none"
 width=""
 
-_duration=""
-_percent=""
-_period=""
-_short_mode=false
-_use_color=false
-
 format_entry() {
-    local short_period="$_period"
-    [[ -n "$short_period" ]] || exit_fail "unexpected period: '$_period'"
+    local period="$1" percent="$2" duration="$3" use_color="$4"
+    [[ -n "$period" ]] || exit_fail "unexpected period: '$period'"
 
     local color_esc="" reset_esc=""
-    if "$_use_color"
+    if "$use_color"
     then
-        color_esc=$(printf '\033[38;5;%sm' "${period_color[$_period]}")
+        color_esc=$(printf '\033[38;5;%sm' "${period_color[$period]}")
         reset_esc=$'\033[39m'
     fi
 
@@ -423,12 +409,12 @@ format_entry() {
         bar)
             printf "%s%s%s" \
                 "$color_esc" \
-                "$(bar "$_percent" "$width" "$bar_style")" "$reset_esc"
+                "$(bar "$percent" "$width" "$bar_style")" "$reset_esc"
             return
             ;;
         percent)
             local pfmt="%.0f"
-            if "$one_line" && "$_use_color"
+            if "$one_line" && "$use_color"
             then
                 pfmt="%3.0f"
             fi
@@ -440,25 +426,28 @@ format_entry() {
                 suffix=""
             fi
             printf "%s${pfmt}${suffix}%s" \
-                "$color_esc" "$_percent" "$reset_esc"
+                "$color_esc" "$percent" "$reset_esc"
             return
             ;;
         datetime)
             local dfmt="%s"
-            if "$one_line" && "$_use_color"
+            if "$one_line" && "$use_color"
             then
                 dfmt="%6s"
             fi
-            printf "%s${dfmt}%s" "$color_esc" "$_duration" "$reset_esc"
+            printf "%s${dfmt}%s" "$color_esc" "$duration" "$reset_esc"
             return
             ;;
     esac
 
     local bar_out=""
-    (( width > 0 )) && bar_out=" $(bar "$_percent" "$width" "$bar_style")"
+    (( width > 0 )) && bar_out=" $(bar "$percent" "$width" "$bar_style")"
+
+    local short_mode=false
+    [[ "$display" = "short" ]] && short_mode=true
 
     local prefix="" pfmt="%.0f" dfmt="%s"
-    if "$_short_mode"
+    if "$short_mode"
     then
         pfmt="%2.0f"
         dfmt="%7s"
@@ -467,7 +456,7 @@ format_entry() {
         pfmt="%3.0f"
         dfmt="%6s"
     else
-        prefix=$(printf '%7s ' "$short_period")
+        prefix=$(printf '%7s ' "$period")
         pfmt="%2.0f"
     fi
 
@@ -480,11 +469,11 @@ format_entry() {
     fi
 
     local dur_sep=" "
-    [[ -z "$_duration" ]] && dur_sep=""
+    [[ -z "$duration" ]] && dur_sep=""
 
     # pfmt/dfmt/pct are controlled format fragments, not user input.
     printf "%s%s${pfmt}${pct}%s${dur_sep}${dfmt}%s" \
-        "$color_esc" "$prefix" "$_percent" "$bar_out" "$_duration" "$reset_esc"
+        "$color_esc" "$prefix" "$percent" "$bar_out" "$duration" "$reset_esc"
 }
 
 apply_option() {
@@ -527,16 +516,14 @@ set_only_period() {
 render_output() {
     # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
     # Uses the shared state globals documented above parse_args.
+    # Passes the per-line fields and resolved use_color to format_entry.
 
-    _use_color=false
+    local use_color=false
     case "$color_mode" in
-        auto)  [[ -t 1 ]] && _use_color=true  ;;
-        color)               _use_color=true  ;;
-        plain)               _use_color=false ;;
+        auto)  [[ -t 1 ]] && use_color=true  ;;
+        color)               use_color=true  ;;
+        plain)               use_color=false ;;
     esac
-
-    _short_mode=false
-    [[ "$display" = "short" ]] && _short_mode=true
 
     local ts_prefix=""
     if "$date_mode"
@@ -550,28 +537,29 @@ render_output() {
     fi
 
     local timedate joined=""
-    while IFS=, read -r _period _percent timedate
+    while IFS=, read -r period percent timedate
     do
-        if [[ "$only_period" != "all" && "$_period" != "$only_period" ]]
+        if [[ "$only_period" != "all" && "$period" != "$only_period" ]]
         then
             continue
         fi
 
+        local duration=""
         if [[ "$only_field" = "bar" || "$only_field" = "percent" ]]
         then
-            _duration=""
+            duration=""
         elif "$numbers_mode"
         then
-            _duration=$(seconds_until_iso "$timedate")
-        elif "$_short_mode" || "$one_line"
+            duration=$(seconds_until_iso "$timedate")
+        elif [[ "$display" = "short" || "$one_line" = true ]]
         then
-            _duration=$(human_readable_short "$timedate")
+            duration=$(human_readable_short "$timedate")
         else
-            _duration=$(human_readable "$timedate")
+            duration=$(human_readable "$timedate")
         fi
 
         local line
-        line=$(format_entry)
+        line=$(format_entry "$period" "$percent" "$duration" "$use_color")
         if "$one_line"
         then
             joined="${joined:+$joined, }$line"

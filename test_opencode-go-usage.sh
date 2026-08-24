@@ -124,21 +124,17 @@ assert_args_fail() {
 # defaults. Each format_entry test calls this then overrides only the
 # fields it cares about, so a new required global won't break every test.
 reset_format_entry_state() {
-    _period="rolling"
-    _percent=50
-    _duration="12345"
-    _short_mode=false
+    display="full"
+    color_mode="plain"
     one_line=false
     width=0
-    _use_color=false
     numbers_mode=false
     bar_style="vertical"
     only_field="none"
 }
 
 # Reset the shared-state globals that render_output reads. render_output
-# derives _use_color/_short_mode internally from color_mode/display, so
-# those are not set here.
+# resolves use_color internally from color_mode, so that is not set here.
 reset_render_output_state() {
     display="full"
     color_mode="plain"
@@ -298,76 +294,85 @@ assert_nonzero "$rc" "parse_usage_json malformed json exits non-zero"
 # format_entry: numbers and --only-* modes.
 reset_format_entry_state
 numbers_mode=true
-assert_eq "rolling 50 12345" "$(format_entry)" "format_entry numbers full"
+assert_eq "rolling 50 12345" "$(format_entry rolling 50 12345 false)" \
+    "format_entry numbers full"
 
 reset_format_entry_state
-_short_mode=true
+display="short"
 numbers_mode=true
-assert_eq "50   12345" "$(format_entry)" "format_entry numbers short"
+assert_eq "50   12345" "$(format_entry rolling 50 12345 false)" \
+    "format_entry numbers short"
 
 reset_format_entry_state
 one_line=true
 numbers_mode=true
-assert_eq " 50  12345" "$(format_entry)" "format_entry numbers one-line"
+assert_eq " 50  12345" "$(format_entry rolling 50 12345 false)" \
+    "format_entry numbers one-line"
 
 reset_format_entry_state
 one_line=true
-assert_eq " 50%  12345" "$(format_entry)" "format_entry one-line"
+assert_eq " 50%  12345" "$(format_entry rolling 50 12345 false)" \
+    "format_entry one-line"
 
 reset_format_entry_state
 one_line=true
-_use_color=true
+color_mode="color"
 numbers_mode=true
-assert_eq "${rolling_color_esc} 50  12345${color_reset}" "$(format_entry)" \
+assert_eq "${rolling_color_esc} 50  12345${color_reset}" \
+    "$(format_entry rolling 50 12345 true)" \
     "format_entry numbers one-line color aligned"
 
 reset_format_entry_state
 one_line=true
-_use_color=true
-assert_eq "${rolling_color_esc} 50%  12345${color_reset}" "$(format_entry)" \
+color_mode="color"
+assert_eq "${rolling_color_esc} 50%  12345${color_reset}" \
+    "$(format_entry rolling 50 12345 true)" \
     "format_entry one-line color aligned"
 
 # format_entry: numbers mode with a width-8 bar.
 reset_format_entry_state
 width=8
 numbers_mode=true
-assert_eq "rolling 50 ████␣␣␣␣ 12345" "$(format_entry)" \
+assert_eq "rolling 50 ████␣␣␣␣ 12345" "$(format_entry rolling 50 12345 false)" \
     "format_entry numbers full with bar"
 
 # format_entry: --only-* modes.
 reset_format_entry_state
 width=13
 only_field="bar"
-assert_eq "██████▄␣␣␣␣␣␣" "$(format_entry)" "format_entry only bar"
+assert_eq "██████▄␣␣␣␣␣␣" "$(format_entry rolling 50 12345 false)" \
+    "format_entry only bar"
 
 reset_format_entry_state
-_duration=""
 only_field="percent"
-assert_eq "50%" "$(format_entry)" "format_entry only percent"
+assert_eq "50%" "$(format_entry rolling 50 "" false)" \
+    "format_entry only percent"
 
 reset_format_entry_state
-_duration=""
 numbers_mode=true
 only_field="percent"
-assert_eq "50" "$(format_entry)" "format_entry only percent with numbers"
+assert_eq "50" "$(format_entry rolling 50 "" false)" \
+    "format_entry only percent with numbers"
 
 reset_format_entry_state
-_duration=""
 one_line=true
-_use_color=true
+color_mode="color"
 only_field="percent"
-assert_eq "${rolling_color_esc} 50%${color_reset}" "$(format_entry)" \
+assert_eq "${rolling_color_esc} 50%${color_reset}" \
+    "$(format_entry rolling 50 "" true)" \
     "format_entry only percent one-line color aligned"
 
 reset_format_entry_state
 only_field="datetime"
-assert_eq "12345" "$(format_entry)" "format_entry only datetime"
+assert_eq "12345" "$(format_entry rolling 50 12345 false)" \
+    "format_entry only datetime"
 
 reset_format_entry_state
 one_line=true
-_use_color=true
+color_mode="color"
 only_field="datetime"
-assert_eq "${rolling_color_esc} 12345${color_reset}" "$(format_entry)" \
+assert_eq "${rolling_color_esc} 12345${color_reset}" \
+    "$(format_entry rolling 50 12345 true)" \
     "format_entry only datetime one-line color aligned"
 
 # parse_args: --force / -f sets force=true; default is false.
