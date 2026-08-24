@@ -24,9 +24,9 @@ _usage() {
     if "$use_color"
     then
         local rc="${period_color[rolling]}" wc="${period_color[weekly]}" mc="${period_color[monthly]}"
-        rolling_str=$'\033[38;5;'"${rc}"$'m'"rolling"$'\033[39m'
-        weekly_str=$'\033[38;5;'"${wc}"$'m'"weekly"$'\033[39m'
-        monthly_str=$'\033[38;5;'"${mc}"$'m'"monthly"$'\033[39m'
+        rolling=$'\033[38;5;'"${rc}"$'m'"rolling"$'\033[39m'
+        weekly=$'\033[38;5;'"${wc}"$'m'"weekly"$'\033[39m'
+        monthly=$'\033[38;5;'"${mc}"$'m'"monthly"$'\033[39m'
     fi
 
     cat <<EOF
@@ -50,8 +50,8 @@ Bar styles (-v/-z/-g) are mutually exclusive; -v is the default, ␣ means empty
   -w N, --width=N    0-13 (8 is the default; 0 means no bar is drawn)
         --only-percent/-bar/-datetime
             only show one field: percent remaining / progress bar /  reset time
-        --only-${rolling_str}${slash}-${weekly_str}${slash}-${monthly_str}
-            only show one period: ${rolling_str} ${slash} ${weekly_str} ${slash} ${monthly_str}
+        --only-${rolling}${slash}-${weekly}${slash}-${monthly}
+           only show one period: ${rolling}${slash}${weekly}${slash}${monthly}
 
 All styles use an empty cell, ␣.  The gradient bar uses four shades: ␣░▒▓█
 The default vertical bar fills bottom-to-top with 8 steps per cell:  ␣▁▂▃▄▅▆▇█
@@ -216,7 +216,7 @@ _bar() {
     esac
 
     # Total sub-steps, split into full cells + the partial step.
-    # Integer division truncates down so we never show a step we haven't reached.
+    # Integer division truncates down, we never show a step we haven't reached.
     local total=$(( percent * width * steps_per_cell / 100 ))
     local int=$((   total / steps_per_cell ))
     local steps=$(( total % steps_per_cell ))
@@ -318,7 +318,8 @@ _fetch_api() {
 response: '$body'"
 
     local parsed
-    parsed=$(_parse_usage_json <<< "$body") || _exit_fail "failed to parse API response"
+    parsed=$(_parse_usage_json <<< "$body") \
+        || _exit_fail "failed to parse API response"
 
     local line_count
     line_count=$(printf '%s\n' "$parsed" | wc -l)
@@ -381,25 +382,25 @@ readonly -A _long_alias=(
 #
 # Keep them in sync across these functions!
 #
-#       bar_style       "vertical" | "horizontal" | "gradient"
-#       bar_style_set   true | false
-#       color_mode      "auto" | "color" | "plain"
-#       date_mode       true | false
-#       display         "full" | "short"
-#       force           true | false
-#       numbers_mode    true | false
-#       one_line        true | false
-#       only_period     "all" | "rolling" | "weekly" | "monthly"
-#       only_field      "none" | "bar" | "percent" | "datetime"
-#       width           bar width (numeric string), "" means "use default"
+#       bar_style      "vertical" | "horizontal" | "gradient"
+#       bar_style_set  true | false
+#       color_mode     "auto" | "color" | "plain"
+#       date_mode      true | false
+#       display        "full" | "short"
+#       force          true | false
+#       numbers_mode   true | false
+#       one_line       true | false
+#       only_period    "all" | "rolling" | "weekly" | "monthly"
+#       only_field     "none" | "bar" | "percent" | "datetime"
+#       width          bar width (numeric string), "" means "use default"
 #
 # Additional shared state set by _render_output and consumed by _format_entry:
 #
-#       _duration_text  formatted reset-time string
-#       _percent        current period percent (integer)
-#       _period         current period name ("rolling", "weekly", "monthly")
-#       _short_mode     true | false (derived from display)
-#       _use_color      true | false (derived from color_mode)
+#       _duration      formatted reset-time string
+#       _percent       current period percent (integer)
+#       _period        current period name ("rolling", "weekly", "monthly")
+#       _short_mode    true | false (derived from display)
+#       _use_color     true | false (derived from color_mode)
 bar_style="vertical"
 bar_style_set=false
 color_mode="auto"
@@ -412,7 +413,7 @@ only_period="all"
 only_field="none"
 width=""
 
-_duration_text=""
+_duration=""
 _percent=""
 _period=""
 _short_mode=false
@@ -432,7 +433,8 @@ _format_entry() {
     case "$only_field" in
         bar)
             printf "%s%s%s" \
-                "$color_esc" "$(_bar "$_percent" "$width" "$bar_style")" "$reset_esc"
+                "$color_esc" \
+                "$(_bar "$_percent" "$width" "$bar_style")" "$reset_esc"
             return
             ;;
         percent)
@@ -458,13 +460,13 @@ _format_entry() {
             then
                 dfmt="%6s"
             fi
-            printf "%s${dfmt}%s" "$color_esc" "$_duration_text" "$reset_esc"
+            printf "%s${dfmt}%s" "$color_esc" "$_duration" "$reset_esc"
             return
             ;;
     esac
 
-    local bar_part=""
-    (( width > 0 )) && bar_part=" $(_bar "$_percent" "$width" "$bar_style")"
+    local bar=""
+    (( width > 0 )) && bar=" $(_bar "$_percent" "$width" "$bar_style")"
 
     local prefix="" pfmt="%.0f" dfmt="%s"
     if "$_short_mode"
@@ -482,18 +484,18 @@ _format_entry() {
 
     # Use "%%" so printf prints a literal "%"; a bare "%" would be
     # interpreted as the start of another conversion specifier.
-    local suffix="%%"
+    local pct="%%"
     if "$numbers_mode"
     then
-        suffix=""
+        pct=""
     fi
 
     local dur_sep=" "
-    [[ -z "$_duration_text" ]] && dur_sep=""
+    [[ -z "$_duration" ]] && dur_sep=""
 
-    # pfmt/dfmt/suffix are controlled format fragments, not user input.
-    printf "%s%s${pfmt}${suffix}%s${dur_sep}${dfmt}%s" \
-        "$color_esc" "$prefix" "$_percent" "$bar_part" "$_duration_text" "$reset_esc"
+    # pfmt/dfmt/pct are controlled format fragments, not user input.
+    printf "%s%s${pfmt}${pct}%s${dur_sep}${dfmt}%s" \
+        "$color_esc" "$prefix" "$_percent" "$bar" "$_duration" "$reset_esc"
 }
 
 _apply_option() {
@@ -679,15 +681,15 @@ _render_output() {
 
         if [[ "$only_field" = "bar" || "$only_field" = "percent" ]]
         then
-            _duration_text=""
+            _duration=""
         elif "$numbers_mode"
         then
-            _duration_text=$(_seconds_until_iso "$timedate")
+            _duration=$(_seconds_until_iso "$timedate")
         elif "$_short_mode" || "$one_line"
         then
-            _duration_text=$(_human_readable_short "$timedate")
+            _duration=$(_human_readable_short "$timedate")
         else
-            _duration_text=$(_human_readable "$timedate")
+            _duration=$(_human_readable "$timedate")
         fi
 
         local line
