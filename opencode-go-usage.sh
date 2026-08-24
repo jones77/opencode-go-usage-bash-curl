@@ -50,7 +50,7 @@ Bar styles (-v/-z/-g) are mutually exclusive; -v is the default, ␣ means empty
   -w N, --width=N    0-13 (8 is the default; 0 means no bar is drawn)
         --only-percent/-bar/-datetime
             only show one field: percent remaining / progress bar /  reset time
-        --only-${rolling_str}${slash}${weekly_str}${slash}${monthly_str}
+        --only-${rolling_str}${slash}-${weekly_str}${slash}-${monthly_str}
             only show one period: ${rolling_str} ${slash} ${weekly_str} ${slash} ${monthly_str}
 
 All styles use an empty cell, ␣.  The gradient bar uses four shades: ␣░▒▓█
