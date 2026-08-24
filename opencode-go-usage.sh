@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Print OpenCode Go usage numbers from
-#   http://opencode.ai/workspace/wrk_workspace_id/go
+# Print OpenCode Go usage numbers.
 # Expects a .env file with OPENCODE_GO_API_KEY=key in it.
 # Depends on python3.
 set -euo pipefail
@@ -115,38 +114,7 @@ _mtime_seconds() {
 }
 
 # shellcheck disable=SC2154  # associative-array keys, not variables
-readonly -A period_color=(
-    [rolling]=27
-    [weekly]=28
-    [monthly]=166
-)
-
-# shellcheck disable=SC2154  # associative-array keys, not variables
-readonly -A period_label=(
-    [rolling]="rolling"
-    [weekly]="weekly"
-    [monthly]="monthly"
-)
-
-# Option metadata used by _parse_args. getopts consumes the optstring; the
-# long_alias map lets the long-option loop dispatch through _apply_option.
-readonly _optstring=":hcpdn1svzgw:f"
-
-# shellcheck disable=SC2154  # associative-array keys, not variables
-readonly -A _long_alias=(
-    [color]=c
-    [date]=d
-    [force]=f
-    [gradient]=g
-    [help]=h
-    [horizontal]=z
-    [numbers]=n
-    [one-line]=1
-    [plain]=p
-    [short]=s
-    [vertical]=v
-    [width]=w
-)
+readonly -A period_color=([rolling]=27 [weekly]=28 [monthly]=166)
 
 _format_duration() {
     declare -A args=(
@@ -338,9 +306,11 @@ _fetch_api() {
     trap "rm -f '$auth_header_file'" EXIT
     (umask 077; printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" > "$auth_header_file")
 
-    local curl_exit=0
+    local curl_exit=0 response
     response=$(curl \
-        -s -w "%{http_code}" -X GET "https://opencode.ai/zen/go/v1/usage" \
+        -s -w "%{http_code}" \
+        --connect-timeout 10 --max-time 30 \
+        -X GET "https://opencode.ai/zen/go/v1/usage" \
         -H "@$auth_header_file" \
         -H "Accept: application/json"
     ) || curl_exit=$?
@@ -351,8 +321,8 @@ _fetch_api() {
     (( curl_exit != 0 )) && _exit_fail \
         "curl failed with exit code $curl_exit (connection error)"
 
-    readonly http_status="${response:${#response}-3}"
-    readonly body="${response:0:${#response}-3}"
+    local -r http_status="${response:${#response}-3}"
+    local -r body="${response:0:${#response}-3}"
 
     (( http_status != 200 )) && _exit_fail \
         "API request failed with status: $http_status
@@ -395,36 +365,102 @@ _load_lines() {
     fi
 }
 
-_format_entry() {
-    local period="$1" percent="$2" duration_text="$3" short_mode="$4" \
-        one_line="$5" width="$6" use_color="$7" numbers_mode="$8" \
-        bar_style="${9}" only_style="${10}"
+_set_only_style() {
+    local new="$1"
+    [[ "$only_style" != "none" ]] \
+        && _exit_fail "--only-* options are mutually exclusive"
+    only_style="$new"
+}
 
-    local short_period="${period_label[$period]}"
-    [[ -n "$short_period" ]] || _exit_fail "unexpected period: '$period'"
+_set_only_period() {
+    local new="$1"
+    [[ "$only_period" != "all" ]] \
+        && _exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
+    only_period="$new"
+}
+
+# Option metadata used by _parse_args. getopts consumes _optstring;
+# the long_alias map lets the long-option loop dispatch through _apply_option.
+readonly _optstring=":hcpdn1svzgw:f"
+
+# shellcheck disable=SC2154  # associative-array keys, not variables
+readonly -A _long_alias=(
+    [color]=c
+    [date]=d
+    [force]=f
+    [gradient]=g
+    [help]=h
+    [horizontal]=z
+    [numbers]=n
+    [one-line]=1
+    [plain]=p
+    [short]=s
+    [vertical]=v
+    [width]=w
+)
+
+# Shared state: The following globals are set by: _parse_args, _apply_option
+#               and consumed by: _main, _render_output, _format_entry
+#
+# Keep them in sync across these functions!
+#
+#       bar_style       "vertical" | "horizontal" | "gradient"
+#       bar_style_set   true | false
+#       color_mode      "auto" | "color" | "plain"
+#       date_mode       true | false
+#       display         "full" | "short"
+#       force           true | false
+#       numbers_mode    true | false
+#       one_line        true | false
+#       only_period     "all" | "rolling" | "weekly" | "monthly"
+#       only_style      "none" | "bar" | "percent" | "datetime"
+#       width           bar width (numeric string), "" means "use default"
+#
+# Additional shared state set by _render_output and consumed by _format_entry:
+#
+#       _duration_text  formatted reset-time string
+#       _percent        current period percent (integer)
+#       _period         current period name ("rolling", "weekly", "monthly")
+#       _short_mode     true | false (derived from display)
+#       _use_color      true | false (derived from color_mode)
+bar_style="vertical"
+bar_style_set=false
+color_mode="auto"
+date_mode=false
+display="full"
+force=false
+numbers_mode=false
+one_line=false
+only_period="all"
+only_style="none"
+width=""
+
+_duration_text=""
+_percent=""
+_period=""
+_short_mode=false
+_use_color=false
+
+_format_entry() {
+    local short_period="$_period"
+    [[ -n "$short_period" ]] || _exit_fail "unexpected period: '$_period'"
 
     local color_esc="" reset_esc=""
-    if "$use_color"
+    if "$_use_color"
     then
-        color_esc=$(printf '\033[38;5;%sm' "${period_color[$period]}")
+        color_esc=$(printf '\033[38;5;%sm' "${period_color[$_period]}")
         reset_esc=$'\033[39m'
-    fi
-
-    local bar_part=""
-    if (( width > 0 ))
-    then
-        bar_part=" $(_bar "$percent" "$width" "$bar_style")"
     fi
 
     case "$only_style" in
         bar)
             printf "%s%s%s" \
-                "$color_esc" "$(_bar "$percent" "$width" "$bar_style")" "$reset_esc"
+                "$color_esc" "$(_bar "$_percent" "$width" "$bar_style")" "$reset_esc"
             return
             ;;
         percent)
             local pfmt="%.0f"
-            if "$one_line" && "$use_color"
+            if "$one_line" && "$_use_color"
             then
                 pfmt="%3.0f"
             fi
@@ -436,28 +472,34 @@ _format_entry() {
                 suffix=""
             fi
             printf "%s${pfmt}${suffix}%s" \
-                "$color_esc" "$percent" "$reset_esc"
+                "$color_esc" "$_percent" "$reset_esc"
             return
             ;;
         datetime)
             local dfmt="%s"
-            if "$one_line" && "$use_color"
+            if "$one_line" && "$_use_color"
             then
                 dfmt="%6s"
             fi
-            printf "%s${dfmt}%s" "$color_esc" "$duration_text" "$reset_esc"
+            printf "%s${dfmt}%s" "$color_esc" "$_duration_text" "$reset_esc"
             return
             ;;
     esac
 
+    local bar_part=""
+    if (( width > 0 ))
+    then
+        bar_part=" $(_bar "$_percent" "$width" "$bar_style")"
+    fi
+
     local prefix="" pfmt="%.0f" dfmt="%s"
-    if "$short_mode"
+    if "$_short_mode"
     then
         pfmt="%2.0f"
         dfmt="%7s"
     elif "$one_line"
     then
-        if "$use_color"
+        if "$_use_color"
         then
             pfmt="%3.0f"
             dfmt="%6s"
@@ -475,10 +517,13 @@ _format_entry() {
         suffix=""
     fi
 
+    local dur_sep=" "
+    [[ -z "$_duration_text" ]] && dur_sep=""
+
     # shellcheck disable=SC2059
     # pfmt/dfmt/suffix are controlled format fragments, not user input.
-    printf "%s%s${pfmt}${suffix}%s ${dfmt}%s" \
-        "$color_esc" "$prefix" "$percent" "$bar_part" "$duration_text" "$reset_esc"
+    printf "%s%s${pfmt}${suffix}%s${dur_sep}${dfmt}%s" \
+        "$color_esc" "$prefix" "$_percent" "$bar_part" "$_duration_text" "$reset_esc"
 }
 
 _apply_option() {
@@ -504,60 +549,20 @@ _apply_option() {
     esac
 }
 
-_set_only_style() {
-    local new="$1"
-    [[ "$only_style" != "none" ]] \
-        && _exit_fail "--only-* options are mutually exclusive"
-    only_style="$new"
-}
-
-_set_only_period() {
-    local new="$1"
-    [[ "$only_period" != "all" ]] \
-        && _exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
-    only_period="$new"
-}
-
-# Shared state: the following globals are set by _parse_args and consumed by
-# _main and _render_output. Keep them in sync across these functions.
-#
-#       display            "full" | "short"
-#       color_mode      "auto" | "color" | "plain"
-#       width           bar width (numeric string), "" means "use default"
-#       one_line        true | false
-#       date_mode       true | false
-#       numbers_mode    true | false
-#       bar_style       "vertical" | "horizontal" | "gradient"
-#       bar_style_set   true | false
-#       only_style      "none" | "bar" | "percent" | "datetime"
-#       only_period     "all" | "rolling" | "weekly" | "monthly"
-#       force           true | false
-display="full"
-color_mode="auto"
-width=""
-one_line=false
-date_mode=false
-numbers_mode=false
-bar_style="vertical"
-bar_style_set=false
-only_style="none"
-only_period="all"
-force=false
-
 _parse_args() {
     # Reset shared-state globals to defaults on each invocation so repeated
     # calls (e.g. in tests) don't see stale values.
-    display="full"
-    color_mode="auto"
-    width=""
-    one_line=false
-    date_mode=false
-    numbers_mode=false
     bar_style="vertical"
     bar_style_set=false
-    only_style="none"
-    only_period="all"
+    color_mode="auto"
+    date_mode=false
+    display="full"
     force=false
+    numbers_mode=false
+    one_line=false
+    only_period="all"
+    only_style="none"
+    width=""
 
     # Separate short and long options before dispatching. Only -w/--width
     # take values, so those two forms must consume their following argument.
@@ -662,15 +667,15 @@ _render_output() {
     # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
     # Uses the shared state globals documented above _parse_args.
 
-    local use_color=false
+    _use_color=false
     case "$color_mode" in
-        color) use_color=true ;;
-        plain) use_color=false ;;
-        auto)  [[ -t 1 ]] && use_color=true ;;
+        color) _use_color=true ;;
+        plain) _use_color=false ;;
+        auto)  [[ -t 1 ]] && _use_color=true ;;
     esac
 
-    local short_mode=false
-    [[ "$display" = "short" ]] && short_mode=true
+    _short_mode=false
+    [[ "$display" = "short" ]] && _short_mode=true
 
     local timestamp=""
     if "$date_mode"
@@ -683,38 +688,29 @@ _render_output() {
         fi
     fi
 
-    local bar_width=$width
-    if [[ "$only_style" = "percent" || "$only_style" = "datetime" ]]
-    then
-        bar_width=0
-    fi
-
-    local period percent timedate joined=""
-    while IFS=, read -r period percent timedate
+    local timedate joined=""
+    while IFS=, read -r _period _percent timedate
     do
-        if [[ "$only_period" != "all" && "$period" != "$only_period" ]]
+        if [[ "$only_period" != "all" && "$_period" != "$only_period" ]]
         then
             continue
         fi
 
-        local duration_text
         if [[ "$only_style" = "bar" || "$only_style" = "percent" ]]
         then
-            duration_text=""
+            _duration_text=""
         elif "$numbers_mode"
         then
-            duration_text=$(_seconds_until_iso "$timedate")
-        elif "$short_mode" || "$one_line"
+            _duration_text=$(_seconds_until_iso "$timedate")
+        elif "$_short_mode" || "$one_line"
         then
-            duration_text=$(_human_readable_short "$timedate")
+            _duration_text=$(_human_readable_short "$timedate")
         else
-            duration_text=$(_human_readable "$timedate")
+            _duration_text=$(_human_readable "$timedate")
         fi
 
         local line
-        line=$(_format_entry "$period" "$percent" "$duration_text" \
-            "$short_mode" "$one_line" "$bar_width" "$use_color" \
-            "$numbers_mode" "$bar_style" "$only_style")
+        line=$(_format_entry)
         if "$one_line"
         then
             joined="${joined:+$joined, }$line"
@@ -744,18 +740,23 @@ _main() {
         fi
     fi
 
-    [[ "$width" =~ ^[0-9]+$ ]] || \
-        _exit_fail "width must be a number (got '$width')"
+    [[ "$width" =~ ^[0-9]+$ ]] \
+        || _exit_fail "width must be a number (got '$width')"
 
-    (( width < 0 || width > 13 )) && \
-        _exit_fail "width must be between 0 and 13 (got '$width')"
+    (( width < 0 || width > 13 )) \
+        && _exit_fail "width must be between 0 and 13 (got '$width')"
 
-    [[ "$display" = "short" && "$one_line" = true ]] && \
-        _exit_fail "--short and --one-line are mutually exclusive"
+    [[ "$display" = "short" && "$one_line" = true ]] \
+        && _exit_fail "--short and --one-line are mutually exclusive"
 
-    [[ "$only_style" = "bar" && \
-       ( "$display" = "short" || "$one_line" = true ) ]] && \
-        _exit_fail "--only-bar cannot be used with --short or --one-line (bar width would be 0)"
+    [[ "$only_style" = "bar" \
+            && ( "$display" = "short" || "$one_line" = true ) ]] \
+        && _exit_fail \
+"--only-bar cannot be used with --short or --one-line (bar width would be 0)"
+
+    [[ "$only_style" = "bar" && "$width" = "0" ]] \
+        && _exit_fail \
+"--only-bar cannot be used with -w 0 (bar would be empty)"
 
     _load_lines | _render_output
 }

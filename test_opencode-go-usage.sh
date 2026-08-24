@@ -7,6 +7,7 @@ set -uo pipefail
 
 # shellcheck source=/dev/null
 source ./opencode-go-usage.sh
+set +e  # undo set -e inherited from the sourced script
 
 pass=0
 fail=0
@@ -145,50 +146,98 @@ assert_eq "0 0 0 0" \
     "_duration_from_iso8601 past date clamps to zero"
 
 # _format_entry: numbers and --only-* modes.
-# Signature: period percent duration_text short one_line width color \
-#            numbers_mode bar_style only_style
+# Sets _-prefixed globals that _format_entry now reads.
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=false width=0 _use_color=false \
+    numbers_mode=true bar_style="vertical" only_style="none"
 assert_eq "rolling 50 12345" \
-    "$(_format_entry "rolling" 50 "12345" false false 0 false true "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry numbers full"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=true one_line=false width=0 _use_color=false \
+    numbers_mode=true bar_style="vertical" only_style="none"
 assert_eq "50   12345" \
-    "$(_format_entry "rolling" 50 "12345" true false 0 false true "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry numbers short"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=true width=0 _use_color=false \
+    numbers_mode=true bar_style="vertical" only_style="none"
 assert_eq "50 12345" \
-    "$(_format_entry "rolling" 50 "12345" false true 0 false true "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry numbers one-line"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=true width=0 _use_color=false \
+    numbers_mode=false bar_style="vertical" only_style="none"
 assert_eq "50% 12345" \
-    "$(_format_entry "rolling" 50 "12345" false true 0 false false "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry one-line"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=true width=0 _use_color=true \
+    numbers_mode=true bar_style="vertical" only_style="none"
 assert_eq "$(printf '\033[38;5;27m 50  12345\033[39m')" \
-    "$(_format_entry "rolling" 50 "12345" false true 0 true true "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry numbers one-line color aligned"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=true width=0 _use_color=true \
+    numbers_mode=false bar_style="vertical" only_style="none"
 assert_eq "$(printf '\033[38;5;27m 50%%  12345\033[39m')" \
-    "$(_format_entry "rolling" 50 "12345" false true 0 true false "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry one-line color aligned"
 
 # _format_entry: numbers mode with a width-8 bar.
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=false width=8 _use_color=false \
+    numbers_mode=true bar_style="vertical" only_style="none"
 assert_eq "rolling 50 ████␣␣␣␣ 12345" \
-    "$(_format_entry "rolling" 50 "12345" false false 8 false true "vertical" "none")" \
+    "$(_format_entry)" \
     "_format_entry numbers full with bar"
 
 # _format_entry: --only-* modes.
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=false width=13 _use_color=false \
+    numbers_mode=false bar_style="vertical" only_style="bar"
 assert_eq "██████▄␣␣␣␣␣␣" \
-    "$(_format_entry "rolling" 50 "12345" false false 13 false false "vertical" "bar")" \
+    "$(_format_entry)" \
     "_format_entry only bar"
+
+_period="rolling" _percent=50 _duration_text="" \
+    _short_mode=false one_line=false width=0 _use_color=false \
+    numbers_mode=false bar_style="vertical" only_style="percent"
 assert_eq "50%" \
-    "$(_format_entry "rolling" 50 "" false false 0 false false "vertical" "percent")" \
+    "$(_format_entry)" \
     "_format_entry only percent"
+
+_period="rolling" _percent=50 _duration_text="" \
+    _short_mode=false one_line=false width=0 _use_color=false \
+    numbers_mode=true bar_style="vertical" only_style="percent"
 assert_eq "50" \
-    "$(_format_entry "rolling" 50 "" false false 0 false true "vertical" "percent")" \
+    "$(_format_entry)" \
     "_format_entry only percent with numbers"
+
+_period="rolling" _percent=50 _duration_text="" \
+    _short_mode=false one_line=true width=0 _use_color=true \
+    numbers_mode=false bar_style="vertical" only_style="percent"
 assert_eq "$(printf '\033[38;5;27m 50%%\033[39m')" \
-    "$(_format_entry "rolling" 50 "" false true 0 true false "vertical" "percent")" \
+    "$(_format_entry)" \
     "_format_entry only percent one-line color aligned"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=false width=0 _use_color=false \
+    numbers_mode=false bar_style="vertical" only_style="datetime"
 assert_eq "12345" \
-    "$(_format_entry "rolling" 50 "12345" false false 0 false false "vertical" "datetime")" \
+    "$(_format_entry)" \
     "_format_entry only datetime"
+
+_period="rolling" _percent=50 _duration_text="12345" \
+    _short_mode=false one_line=true width=0 _use_color=true \
+    numbers_mode=false bar_style="vertical" only_style="datetime"
 assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
-    "$(_format_entry "rolling" 50 "12345" false true 0 true false "vertical" "datetime")" \
+    "$(_format_entry)" \
     "_format_entry only datetime one-line color aligned"
 
 # _parse_args: --force / -f sets force=true; default is false.
@@ -279,6 +328,11 @@ _setup_render_output() {
 }
 
 # _render_output: date prefix in one-line mode includes a comma.
+# Save originals before overriding with stubs.
+_timestamp_orig=$(declare -f _timestamp)
+_human_readable_short_orig=$(declare -f _human_readable_short)
+_seconds_until_iso_orig=$(declare -f _seconds_until_iso)
+_human_readable_orig=$(declare -f _human_readable)
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
 _timestamp() { printf '%s' "2026-08-23T12:00:00"; }
 # shellcheck disable=SC2329  # invoked indirectly through _render_output
@@ -319,6 +373,10 @@ assert_eq " weekly 55% DURATION" "$output" \
 
 # Restore the real functions.
 unset -f _timestamp _human_readable_short _seconds_until_iso _human_readable
+eval "$_timestamp_orig"
+eval "$_human_readable_short_orig"
+eval "$_seconds_until_iso_orig"
+eval "$_human_readable_orig"
 
 echo ""
 echo "passed: $pass  failed: $fail"
