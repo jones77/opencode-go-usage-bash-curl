@@ -365,17 +365,17 @@ _load_lines() {
     fi
 }
 
-_set_only_style() {
+_set_only_field() {
     local new="$1"
-    [[ "$only_style" != "none" ]] \
+    [[ "$only_field" != "none" ]] \
         && _exit_fail "--only-* options are mutually exclusive"
-    only_style="$new"
+    only_field="$new"
 }
 
 _set_only_period() {
     local new="$1"
     [[ "$only_period" != "all" ]] \
-        && _exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
+        && _exit_fail "--only-rolling/-weekly/-monthly are mutually exclusive"
     only_period="$new"
 }
 
@@ -413,7 +413,7 @@ readonly -A _long_alias=(
 #       numbers_mode    true | false
 #       one_line        true | false
 #       only_period     "all" | "rolling" | "weekly" | "monthly"
-#       only_style      "none" | "bar" | "percent" | "datetime"
+#       only_field      "none" | "bar" | "percent" | "datetime"
 #       width           bar width (numeric string), "" means "use default"
 #
 # Additional shared state set by _render_output and consumed by _format_entry:
@@ -432,7 +432,7 @@ force=false
 numbers_mode=false
 one_line=false
 only_period="all"
-only_style="none"
+only_field="none"
 width=""
 
 _duration_text=""
@@ -452,7 +452,7 @@ _format_entry() {
         reset_esc=$'\033[39m'
     fi
 
-    case "$only_style" in
+    case "$only_field" in
         bar)
             printf "%s%s%s" \
                 "$color_esc" "$(_bar "$_percent" "$width" "$bar_style")" "$reset_esc"
@@ -487,10 +487,7 @@ _format_entry() {
     esac
 
     local bar_part=""
-    if (( width > 0 ))
-    then
-        bar_part=" $(_bar "$_percent" "$width" "$bar_style")"
-    fi
+    (( width > 0 )) && bar_part=" $(_bar "$_percent" "$width" "$bar_style")"
 
     local prefix="" pfmt="%.0f" dfmt="%s"
     if "$_short_mode"
@@ -561,7 +558,7 @@ _parse_args() {
     numbers_mode=false
     one_line=false
     only_period="all"
-    only_style="none"
+    only_field="none"
     width=""
 
     # Separate short and long options before dispatching. Only -w/--width
@@ -581,10 +578,7 @@ _parse_args() {
                 shift
                 ;;
             -w)
-                if (( $# < 2 ))
-                then
-                    _exit_fail "-w requires a value"
-                fi
+                (( $# < 2 )) && _exit_fail "-w requires a value"
                 short_args+=("$1" "$2")
                 shift 2
                 ;;
@@ -635,9 +629,9 @@ _parse_args() {
                 _apply_option "w" "$1"
                 shift
                 ;;
-            --only-bar)      _set_only_style "bar"       ;;
-            --only-percent)  _set_only_style "percent"   ;;
-            --only-datetime) _set_only_style "datetime"  ;;
+            --only-bar)      _set_only_field "bar"       ;;
+            --only-percent)  _set_only_field "percent"   ;;
+            --only-datetime) _set_only_field "datetime"  ;;
             --only-rolling)  _set_only_period "rolling" ;;
             --only-weekly)   _set_only_period "weekly"  ;;
             --only-monthly)  _set_only_period "monthly" ;;
@@ -669,24 +663,9 @@ _render_output() {
 
     _use_color=false
     case "$color_mode" in
-        color) _use_color=true ;;
-        plain) _use_color=false ;;
-        auto)
-            if [[ -n "${NO_COLOR:-}" ]]
-            then
-                _use_color=false
-            elif [[ "${TERM:-}" == "dumb" ]]
-            then
-                _use_color=false
-            elif [[ -t 1 ]]
-            then
-                _use_color=true
-            elif [[ -n "${CLICOLOR_FORCE:-}" \
-                    && "${CLICOLOR_FORCE}" != "0" ]]
-            then
-                _use_color=true
-            fi
-            ;;
+        auto)  [[ -t 1 ]] && _use_color=true  ;;
+        color)               _use_color=true  ;;
+        plain)               _use_color=false ;;
     esac
 
     _short_mode=false
@@ -711,7 +690,7 @@ _render_output() {
             continue
         fi
 
-        if [[ "$only_style" = "bar" || "$only_style" = "percent" ]]
+        if [[ "$only_field" = "bar" || "$only_field" = "percent" ]]
         then
             _duration_text=""
         elif "$numbers_mode"
@@ -744,7 +723,7 @@ _main() {
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
         if [[ "$display" = "short" || "$one_line" = true || \
-           "$only_style" = "percent" || "$only_style" = "datetime" ]]
+           "$only_field" = "percent" || "$only_field" = "datetime" ]]
         then
             width=0
         else
@@ -761,12 +740,12 @@ _main() {
     [[ "$display" = "short" && "$one_line" = true ]] \
         && _exit_fail "--short and --one-line are mutually exclusive"
 
-    [[ "$only_style" = "bar" \
+    [[ "$only_field" = "bar" \
             && ( "$display" = "short" || "$one_line" = true ) ]] \
         && _exit_fail \
 "--only-bar cannot be used with --short or --one-line (bar width would be 0)"
 
-    [[ "$only_style" = "bar" && "$width" = "0" ]] \
+    [[ "$only_field" = "bar" && "$width" = "0" ]] \
         && _exit_fail \
 "--only-bar cannot be used with -w 0 (bar would be empty)"
 

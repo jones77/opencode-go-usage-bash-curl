@@ -149,42 +149,42 @@ assert_eq "0 0 0 0" \
 # Sets _-prefixed globals that _format_entry now reads.
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_style="none"
+    numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "rolling 50 12345" \
     "$(_format_entry)" \
     "_format_entry numbers full"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=true one_line=false width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_style="none"
+    numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "50   12345" \
     "$(_format_entry)" \
     "_format_entry numbers short"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_style="none"
+    numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "50 12345" \
     "$(_format_entry)" \
     "_format_entry numbers one-line"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_style="none"
+    numbers_mode=false bar_style="vertical" only_field="none"
 assert_eq "50% 12345" \
     "$(_format_entry)" \
     "_format_entry one-line"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=true bar_style="vertical" only_style="none"
+    numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "$(printf '\033[38;5;27m 50  12345\033[39m')" \
     "$(_format_entry)" \
     "_format_entry numbers one-line color aligned"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=false bar_style="vertical" only_style="none"
+    numbers_mode=false bar_style="vertical" only_field="none"
 assert_eq "$(printf '\033[38;5;27m 50%%  12345\033[39m')" \
     "$(_format_entry)" \
     "_format_entry one-line color aligned"
@@ -192,7 +192,7 @@ assert_eq "$(printf '\033[38;5;27m 50%%  12345\033[39m')" \
 # _format_entry: numbers mode with a width-8 bar.
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=false width=8 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_style="none"
+    numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "rolling 50 ████␣␣␣␣ 12345" \
     "$(_format_entry)" \
     "_format_entry numbers full with bar"
@@ -200,42 +200,42 @@ assert_eq "rolling 50 ████␣␣␣␣ 12345" \
 # _format_entry: --only-* modes.
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=false width=13 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_style="bar"
+    numbers_mode=false bar_style="vertical" only_field="bar"
 assert_eq "██████▄␣␣␣␣␣␣" \
     "$(_format_entry)" \
     "_format_entry only bar"
 
 _period="rolling" _percent=50 _duration_text="" \
     _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_style="percent"
+    numbers_mode=false bar_style="vertical" only_field="percent"
 assert_eq "50%" \
     "$(_format_entry)" \
     "_format_entry only percent"
 
 _period="rolling" _percent=50 _duration_text="" \
     _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_style="percent"
+    numbers_mode=true bar_style="vertical" only_field="percent"
 assert_eq "50" \
     "$(_format_entry)" \
     "_format_entry only percent with numbers"
 
 _period="rolling" _percent=50 _duration_text="" \
     _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=false bar_style="vertical" only_style="percent"
+    numbers_mode=false bar_style="vertical" only_field="percent"
 assert_eq "$(printf '\033[38;5;27m 50%%\033[39m')" \
     "$(_format_entry)" \
     "_format_entry only percent one-line color aligned"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_style="datetime"
+    numbers_mode=false bar_style="vertical" only_field="datetime"
 assert_eq "12345" \
     "$(_format_entry)" \
     "_format_entry only datetime"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=false bar_style="vertical" only_style="datetime"
+    numbers_mode=false bar_style="vertical" only_field="datetime"
 assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
     "$(_format_entry)" \
     "_format_entry only datetime one-line color aligned"
@@ -253,26 +253,26 @@ assert_eq "true" "$force" "_parse_args -f sets force=true"
 
 # _parse_args: --only-* options can be combined with --short and --one-line.
 display=""
-only_style=""
+only_field=""
 only_period=""
 one_line=""
 date_mode=""
 _parse_args --only-bar --short
-assert_eq "bar" "$only_style" "_parse_args --only-bar --short accepted"
+assert_eq "bar" "$only_field" "_parse_args --only-bar --short accepted"
 assert_eq "short" "$display" "_parse_args --only-bar --short mode"
 
 _parse_args --only-bar --one-line
-assert_eq "bar" "$only_style" "_parse_args --only-bar --one-line accepted"
+assert_eq "bar" "$only_field" "_parse_args --only-bar --one-line accepted"
 assert_eq "true" "$one_line" "_parse_args --only-bar --one-line one_line"
 
 _parse_args --only-percent --short
-assert_eq "percent" "$only_style" "_parse_args --only-percent --short accepted"
+assert_eq "percent" "$only_field" "_parse_args --only-percent --short accepted"
 
 _parse_args --only-datetime --one-line
-assert_eq "datetime" "$only_style" "_parse_args --only-datetime --one-line accepted"
+assert_eq "datetime" "$only_field" "_parse_args --only-datetime --one-line accepted"
 
 _parse_args --only-bar --date
-assert_eq "bar" "$only_style" "_parse_args --only-bar --date accepted"
+assert_eq "bar" "$only_field" "_parse_args --only-bar --date accepted"
 assert_eq "true" "$date_mode" "_parse_args --only-bar --date date_mode"
 
 # _parse_args: --only-* period options.
@@ -288,7 +288,7 @@ assert_eq "monthly" "$only_period" "_parse_args --only-monthly accepted"
 # _parse_args: period options can combine with --only-* output options.
 _parse_args --only-weekly --only-percent
 assert_eq "weekly" "$only_period" "_parse_args --only-weekly --only-percent period"
-assert_eq "percent" "$only_style" "_parse_args --only-weekly --only-percent mode"
+assert_eq "percent" "$only_field" "_parse_args --only-weekly --only-percent mode"
 
 # _parse_args: --only-* options remain mutually exclusive with each other.
 assert_args_fail() {
@@ -323,7 +323,7 @@ _setup_render_output() {
     date_mode="$5"
     numbers_mode="$6"
     bar_style="$7"
-    only_style="$8"
+    only_field="$8"
     only_period="$9"
 }
 
