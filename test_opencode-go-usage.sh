@@ -147,42 +147,42 @@ assert_eq "0 0 0 0" \
 
 # _format_entry: numbers and --only-* modes.
 # Sets _-prefixed globals that _format_entry now reads.
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=false width=0 _use_color=false \
     numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "rolling 50 12345" \
     "$(_format_entry)" \
     "_format_entry numbers full"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=true one_line=false width=0 _use_color=false \
     numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "50   12345" \
     "$(_format_entry)" \
     "_format_entry numbers short"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=true width=0 _use_color=false \
     numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq " 50  12345" \
     "$(_format_entry)" \
     "_format_entry numbers one-line"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=true width=0 _use_color=false \
     numbers_mode=false bar_style="vertical" only_field="none"
 assert_eq " 50%  12345" \
     "$(_format_entry)" \
     "_format_entry one-line"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=true width=0 _use_color=true \
     numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "$(printf '\033[38;5;27m 50  12345\033[39m')" \
     "$(_format_entry)" \
     "_format_entry numbers one-line color aligned"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=true width=0 _use_color=true \
     numbers_mode=false bar_style="vertical" only_field="none"
 assert_eq "$(printf '\033[38;5;27m 50%%  12345\033[39m')" \
@@ -190,7 +190,7 @@ assert_eq "$(printf '\033[38;5;27m 50%%  12345\033[39m')" \
     "_format_entry one-line color aligned"
 
 # _format_entry: numbers mode with a width-8 bar.
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=false width=8 _use_color=false \
     numbers_mode=true bar_style="vertical" only_field="none"
 assert_eq "rolling 50 ████␣␣␣␣ 12345" \
@@ -198,42 +198,42 @@ assert_eq "rolling 50 ████␣␣␣␣ 12345" \
     "_format_entry numbers full with bar"
 
 # _format_entry: --only-* modes.
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=false width=13 _use_color=false \
     numbers_mode=false bar_style="vertical" only_field="bar"
 assert_eq "██████▄␣␣␣␣␣␣" \
     "$(_format_entry)" \
     "_format_entry only bar"
 
-_period="rolling" _percent=50 _duration_text="" \
+_period="rolling" _percent=50 _duration="" \
     _short_mode=false one_line=false width=0 _use_color=false \
     numbers_mode=false bar_style="vertical" only_field="percent"
 assert_eq "50%" \
     "$(_format_entry)" \
     "_format_entry only percent"
 
-_period="rolling" _percent=50 _duration_text="" \
+_period="rolling" _percent=50 _duration="" \
     _short_mode=false one_line=false width=0 _use_color=false \
     numbers_mode=true bar_style="vertical" only_field="percent"
 assert_eq "50" \
     "$(_format_entry)" \
     "_format_entry only percent with numbers"
 
-_period="rolling" _percent=50 _duration_text="" \
+_period="rolling" _percent=50 _duration="" \
     _short_mode=false one_line=true width=0 _use_color=true \
     numbers_mode=false bar_style="vertical" only_field="percent"
 assert_eq "$(printf '\033[38;5;27m 50%%\033[39m')" \
     "$(_format_entry)" \
     "_format_entry only percent one-line color aligned"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=false width=0 _use_color=false \
     numbers_mode=false bar_style="vertical" only_field="datetime"
 assert_eq "12345" \
     "$(_format_entry)" \
     "_format_entry only datetime"
 
-_period="rolling" _percent=50 _duration_text="12345" \
+_period="rolling" _percent=50 _duration="12345" \
     _short_mode=false one_line=true width=0 _use_color=true \
     numbers_mode=false bar_style="vertical" only_field="datetime"
 assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
