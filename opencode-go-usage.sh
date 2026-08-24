@@ -113,7 +113,6 @@ _mtime_seconds() {
     stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null
 }
 
-# shellcheck disable=SC2154  # associative-array keys, not variables
 readonly -A period_color=([rolling]=27 [weekly]=28 [monthly]=166)
 
 _format_duration() {
@@ -291,6 +290,7 @@ _fetch_api() {
     local saved_opts="$-"
     set +x +v
 
+    # shellcheck disable=SC1091 # associative-array keys, not variables
     source "$progdir/.env" \
         || _exit_fail "expected to source ./.env to get OPENCODE_GO_API_KEY"
     [[ -n "${OPENCODE_GO_API_KEY:-}" ]] \
@@ -326,10 +326,12 @@ response: '$body'"
         _exit_fail "expected API response to contain 3 periods"
 
     local tmp="$cache_file.$$"
-    # shellcheck disable=SC2015  # atomic write: only keep tmp if printf && mv both succeed
-    printf '%s\n' "$parsed" > "$tmp" 2>/dev/null \
-        && mv -f "$tmp" "$cache_file" 2>/dev/null \
-        || rm -f "$tmp"
+    if printf '%s\n' "$parsed" > "$tmp" 2>/dev/null
+    then
+        mv -f "$tmp" "$cache_file" 2>/dev/null \
+    else
+        rm -f "$tmp"
+    fi
 
     printf '%s\n' "$parsed"
 }
@@ -489,7 +491,6 @@ _format_entry() {
     local dur_sep=" "
     [[ -z "$_duration_text" ]] && dur_sep=""
 
-    # shellcheck disable=SC2059
     # pfmt/dfmt/suffix are controlled format fragments, not user input.
     printf "%s%s${pfmt}${suffix}%s${dur_sep}${dfmt}%s" \
         "$color_esc" "$prefix" "$_percent" "$bar_part" "$_duration_text" "$reset_esc"
