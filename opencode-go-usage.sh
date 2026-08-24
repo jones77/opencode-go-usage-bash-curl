@@ -737,7 +737,7 @@ _validate_width() {
 
 _main() {
     _parse_args "$@"
-    _validate_options
+    _validate_width
     _load_lines | _render_output
 }
 
