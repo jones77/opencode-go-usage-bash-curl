@@ -5,6 +5,12 @@ and displays your [OpenCode Go](https://opencode.ai) usage.
 
 Results are cached locally for 120 seconds so repeated runs don't hit the API.
 
+## Usage
+
+```bash
+./opencode-go-usage.sh --help
+```
+
 ## Dependencies
 
 - **bash** 4.x+
@@ -13,24 +19,17 @@ Results are cached locally for 120 seconds so repeated runs don't hit the API.
 
 ## Screenshot
 
-<img width="1363" height="666" alt="image" src="https://github.com/user-attachments/assets/26264b0e-9602-4e67-b3c7-dbdae70184cb" />
+<img width="1363" height="666" alt="image"
+ src="https://github.com/user-attachments/assets/26264b0e-9602-4e67-b3c7-dbdae70184cb"
+/>
 
 ## Setup
 
-Copy the example env file and fill in your API key:
-
-```bash
-cp .env.example .env
-```
+Copy the example env file: `cp .env.example .env`
 
 Then edit `.env` and replace `your-api-key-here` with your actual key.
-The `.env` file is gitignored and will never be committed.
-
-## Usage
-
-```bash
-./opencode-go-usage.sh --help
-```
+The `.env` file is `.gitignore`d which (allegedly)
+will prevent it's accidental commital.
 
 ## Tests
 
@@ -38,5 +37,4 @@ The `.env` file is gitignored and will never be committed.
 bash test_opencode-go-usage.sh
 ```
 
-The test file sources the main script through the entry-point guard
-and runs a small built-in harness.
+The test file sources the main script through the entry-point guard.
