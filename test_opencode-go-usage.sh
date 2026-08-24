@@ -164,14 +164,14 @@ assert_eq "50   12345" \
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=false \
     numbers_mode=true bar_style="vertical" only_field="none"
-assert_eq "50 12345" \
+assert_eq " 50  12345" \
     "$(_format_entry)" \
     "_format_entry numbers one-line"
 
 _period="rolling" _percent=50 _duration_text="12345" \
     _short_mode=false one_line=true width=0 _use_color=false \
     numbers_mode=false bar_style="vertical" only_field="none"
-assert_eq "50% 12345" \
+assert_eq " 50%  12345" \
     "$(_format_entry)" \
     "_format_entry one-line"
 
@@ -340,7 +340,7 @@ _human_readable_short() { printf '%s' "FIXED"; }
 _setup_render_output "full" "plain" "0" "true" "true" "false" "vertical" "none" "all"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
     | _render_output)
-assert_eq "2026-08-23T12:00:00, 21% FIXED, 55% FIXED" "$output" \
+assert_eq "2026-08-23T12:00:00,  21%  FIXED,  55%  FIXED" "$output" \
     "_render_output one-line date prefix uses comma"
 
 # _render_output: -d with -n uses epoch seconds for the timestamp prefix.
@@ -359,7 +359,7 @@ assert_eq "1755950400 rolling 21 SECS" "$first_line" \
 _setup_render_output "full" "plain" "0" "true" "true" "true" "vertical" "none" "all"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
     | _render_output)
-assert_eq "1755950400, 21 SECS, 55 SECS" "$output" \
+assert_eq "1755950400,  21   SECS,  55   SECS" "$output" \
     "_render_output numbers one-line date prefix uses epoch seconds and comma"
 
 # _render_output: --only-period filters to a single period.

@@ -16,6 +16,19 @@ _exit_fail() {
 }
 
 _usage() {
+    local use_color=false
+    [[ -t 1 ]] && use_color=true
+
+    local rolling_str="rolling" weekly_str="weekly" monthly_str="monthly"
+    local slash="/"
+    if "$use_color"
+    then
+        local rc="${period_color[rolling]}" wc="${period_color[weekly]}" mc="${period_color[monthly]}"
+        rolling_str=$'\033[38;5;'"${rc}"$'m'"rolling"$'\033[39m'
+        weekly_str=$'\033[38;5;'"${wc}"$'m'"weekly"$'\033[39m'
+        monthly_str=$'\033[38;5;'"${mc}"$'m'"monthly"$'\033[39m'
+    fi
+
     cat <<EOF
 Usage: $progname [options]
 
@@ -30,19 +43,15 @@ Options:
   -n, --numbers  omit '%' and show seconds remaining instead of duration
   -1, --one-line print all values on one line, comma-separated
   -s, --short    compact output: <percent> <short-date>
-Bar styles (-v/-z/-g) are mutually exclusive; -v is the default:
+Bar styles (-v/-z/-g) are mutually exclusive; -v is the default, ␣ means empty
   -v,   --vertical   vertical bar style
   -z,   --horizontal horizontal bar style
   -g,   --gradient   gradient shade bar style
   -w N, --width=N    0-13 (8 is the default; 0 means no bar is drawn)
         --only-percent/-bar/-datetime
             only show one field: percent remaining / progress bar /  reset time
-        --only-rolling/-weekly/-monthly
-            only show one period: rolling / weekly / monthly
-
-To prefix when your OpenCode Go usage was updated
-(from the scripts perspective!)
-    -d/--date uses the local time (YYYY-MM-DDTHH:MM:SS)
+        --only-${rolling_str}${slash}${weekly_str}${slash}${monthly_str}
+            only show one period: ${rolling_str} ${slash} ${weekly_str} ${slash} ${monthly_str}
 
 The -g, gradient bar uses four shades with 4 steps per cell:        ␣░▒▓█
                                                                     01234
@@ -50,8 +59,6 @@ The default vertical bar fills bottom-to-top with 8 steps per cell:  ␣▁▂�
                                                                     012345678
 The -z, horizontal bar fills left-to-right with 8 steps per cell:   ␣▏▎▍▌▋▊▉█
                                                                     012345678
-All include an empty cell: ␣
-
 13 is the maximum width because OpenCode Go's API doesn't use decimals.
 
   Width  One step   One cell  50% -v/--vertical  50% -z/--horizontal
@@ -81,9 +88,6 @@ $(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
                 "$vbar" $((17 - ww)) '' \
                 "$hbar" $((17 - ww)) ''
   done)
-
-At width 13 one step is 1.92%; rendering uses integer math, so the
-recurring decimal only appears in this description.
 EOF
 }
 
@@ -482,11 +486,8 @@ _format_entry() {
         dfmt="%7s"
     elif "$one_line"
     then
-        if "$_use_color"
-        then
-            pfmt="%3.0f"
-            dfmt="%6s"
-        fi
+        pfmt="%3.0f"
+        dfmt="%6s"
     else
         prefix=$(printf '%7s ' "$short_period")
         pfmt="%2.0f"
