@@ -292,35 +292,25 @@ _read_cache() {
 _fetch_api() {
     local cache_file="$1"
 
-    # need OPENCODE_GO_API_KEY to call the API, .env is in the .gitignore file
-    # shellcheck source=/dev/null
+
+    # Save the current options and temporarily disable tracing
+    # to keep the bearer token out of debug output.
+    local saved_opts="$-"
+    set +x +v
+
     source .env \
-        || _exit_fail "expected to source ./.env to get \$OPENCODE_GO_API_KEY"
-    if [[ -z "$OPENCODE_GO_API_KEY" ]]
-    then
-        echo "$progname: error: need a OPENCODE_GO_API_KEY environment variable." >&2
-        exit 1
-    fi
-
-    # Keep the bearer token out of curl's argv (visible via ps) by reading the
-    # Authorization header from a short-lived, restricted temp file.
-    local auth_header_file
-    auth_header_file=$(mktemp "${TMPDIR:-/tmp}/opencode-go-usage-auth.XXXXXX")
-    # shellcheck disable=SC2064  # $auth_header_file expanded here intentionally
-    trap "rm -f '$auth_header_file'" EXIT
-    (umask 077; printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" > "$auth_header_file")
-
+        || _exit_fail "expected to source ./.env to get OPENCODE_GO_API_KEY"
     local curl_exit=0 response
-    response=$(curl \
-        -s -w "%{http_code}" \
-        --connect-timeout 10 --max-time 30 \
-        -X GET "https://opencode.ai/zen/go/v1/usage" \
-        -H "@$auth_header_file" \
-        -H "Accept: application/json"
+    # Using `printf | curl` to prevent ps from seeing the API_KEY.
+    response=$(printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" \
+        | curl  -s -w "%{http_code}" --connect-timeout 10 --max-time 30 \
+                -X GET "https://opencode.ai/zen/go/v1/usage" \
+                -H @- -H "Accept: application/json"
     ) || curl_exit=$?
 
-    trap - EXIT
-    rm -f "$auth_header_file"
+    # Restore the original tracing options.
+    [[ "$saved_opts" == *x* ]] && set -x
+    [[ "$saved_opts" == *v* ]] && set -v
 
     (( curl_exit != 0 )) && _exit_fail \
         "curl failed with exit code $curl_exit (connection error)"
