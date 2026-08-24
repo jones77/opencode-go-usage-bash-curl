@@ -328,7 +328,7 @@ response: '$body'"
     local tmp="$cache_file.$$"
     if printf '%s\n' "$parsed" > "$tmp" 2>/dev/null
     then
-        mv -f "$tmp" "$cache_file" 2>/dev/null \
+        mv -f "$tmp" "$cache_file" 2>/dev/null
     else
         rm -f "$tmp"
     fi
