@@ -19,7 +19,7 @@ _usage() {
     local use_color=false
     [[ -t 1 ]] && use_color=true
 
-    local rolling_str="rolling" weekly_str="weekly" monthly_str="monthly"
+    local rolling="rolling" weekly="weekly" monthly="monthly"
     local slash="/"
     if "$use_color"
     then
@@ -702,10 +702,13 @@ _render_output() {
         fi
     done
 
-    "$one_line" && [[ -n "$joined" ]] && printf '%s\n' "${timestamp}${joined}"
+    if "$one_line" && [[ -n "$joined" ]]
+    then
+        printf '%s\n' "${timestamp}${joined}"
+    fi
 }
 
-_validate_options() {
+_validate_width() {
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
         if [[ "$display"    = "short"   || "$one_line"   = true
@@ -719,15 +722,17 @@ _validate_options() {
 
     [[ "$width" =~ ^[0-9]+$ ]] \
         || _exit_fail "width must be a number (got '$width')"
-
     (( width < 0 || width > 13 )) \
         && _exit_fail "width must be between 0 and 13 (got '$width')"
-
     [[ "$display" = "short" && "$one_line" = true ]] \
         && _exit_fail "--short and --one-line are mutually exclusive"
-
     [[ "$only_field" = "bar" && "$width" = "0" ]] \
         && _exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
+
+    # Explicit return 0 to prevent return codes leaking.  For example,
+    # `fn_that_returns_1 && fn_wont_run` won't run `fn_wont_run` but will
+    # return code 1 out of the function because fn_that_returns_1 ran last.
+    return 0
 }
 
 _main() {

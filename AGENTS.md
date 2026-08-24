@@ -73,6 +73,26 @@ It also avoids sprinkling semicolons through multi-line control structures.
 
 The script is expected to pass `shellcheck`.
 
+## `set -e` and `&&` chains as the last statement of a function
+
+This is not obvious to human users.
+
+A `&&` chain short-circuits: if the left side fails, the right side
+never runs, and the chain returns the left side's exit status (non-zero).
+A function's return value is the exit status of its last command.
+So when a `&&` chain is the **last statement** in a function,
+the function inherits that non-zero status even in the normal (non-error) case.
+
+With `set -e`, a function called as a standalone statement
+(not under `if`, `while`, `&&`, or `||`)
+that returns non-zero kills the script — silently.
+
+The `&&` chain itself is fine; `set -e` does not fire on commands
+*inside* a `&&`/`||` list. The problem is purely the function's
+return value leaking out.
+
+Alert the user to these problems when you spot them.
+
 ## Testing
 
 Core, pure functions (especially the progress-bar `_bar` renderer)
