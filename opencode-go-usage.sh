@@ -337,26 +337,6 @@ response: '$body'"
     printf '%s\n' "$parsed"
 }
 
-load_lines() {
-    local cache_path
-    cache_path=$(cache_file)
-    local now mtime=0
-    now=$(date +%s)
-
-    if [[ -f "$cache_path" ]]
-    then
-        mtime=$(mtime_seconds "$cache_path" 2>/dev/null) || mtime=0
-        mtime=${mtime:-0}
-    fi
-
-    if [[ "$force" != true ]] && (( now - mtime < cache_filename_ttl ))
-    then
-        read_cache "$cache_path"
-    else
-        fetch_api "$cache_path"
-    fi
-}
-
 # Option metadata used by parse_args. getopts consumes _optstring;
 # the long_alias map lets the long-option loop dispatch through apply_option.
 readonly _optstring=":hcpdn1svzgw:f"
@@ -535,6 +515,115 @@ set_only_period() {
     only_period="$new"
 }
 
+render_output() {
+    # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
+    # Uses the shared state globals documented above parse_args.
+
+    _use_color=false
+    case "$color_mode" in
+        auto)  [[ -t 1 ]] && _use_color=true  ;;
+        color)               _use_color=true  ;;
+        plain)               _use_color=false ;;
+    esac
+
+    _short_mode=false
+    [[ "$display" = "short" ]] && _short_mode=true
+
+    local ts_prefix=""
+    if "$date_mode"
+    then
+        if "$one_line"
+        then
+            ts_prefix="$(timestamp "$numbers_mode"), "
+        else
+            ts_prefix="$(timestamp "$numbers_mode") "
+        fi
+    fi
+
+    local timedate joined=""
+    while IFS=, read -r _period _percent timedate
+    do
+        if [[ "$only_period" != "all" && "$_period" != "$only_period" ]]
+        then
+            continue
+        fi
+
+        if [[ "$only_field" = "bar" || "$only_field" = "percent" ]]
+        then
+            _duration=""
+        elif "$numbers_mode"
+        then
+            _duration=$(seconds_until_iso "$timedate")
+        elif "$_short_mode" || "$one_line"
+        then
+            _duration=$(human_readable_short "$timedate")
+        else
+            _duration=$(human_readable "$timedate")
+        fi
+
+        local line
+        line=$(format_entry)
+        if "$one_line"
+        then
+            joined="${joined:+$joined, }$line"
+        else
+            printf '%s\n' "${ts_prefix}${line}"
+        fi
+    done
+
+    if "$one_line" && [[ -n "$joined" ]]
+    then
+        printf '%s\n' "${ts_prefix}${joined}"
+    fi
+}
+
+load_lines() {
+    local cache_path
+    cache_path=$(cache_file)
+    local now mtime=0
+    now=$(date +%s)
+
+    if [[ -f "$cache_path" ]]
+    then
+        mtime=$(mtime_seconds "$cache_path" 2>/dev/null) || mtime=0
+        mtime=${mtime:-0}
+    fi
+
+    if [[ "$force" != true ]] && (( now - mtime < cache_filename_ttl ))
+    then
+        read_cache "$cache_path"
+    else
+        fetch_api "$cache_path"
+    fi
+}
+
+validate_width() {
+    if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
+    then
+        if [[ "$display"    = "short"   || "$one_line"   = true
+           || "$only_field" = "percent" || "$only_field" = "datetime" ]]
+        then
+            width=0
+        else
+            width=8
+        fi
+    fi
+
+    [[ "$width" =~ ^[0-9]+$ ]] \
+        || exit_fail "width must be a number (got '$width')"
+    (( width < 0 || width > 13 )) \
+        && exit_fail "width must be between 0 and 13 (got '$width')"
+    [[ "$display" = "short" && "$one_line" = true ]] \
+        && exit_fail "--short and --one-line are mutually exclusive"
+    [[ "$only_field" = "bar" && "$width" = "0" ]] \
+        && exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
+
+    # Explicit return 0 to prevent return codes leaking.  For example,
+    # `fn_that_returns_1 && fn_wont_run` won't run `fn_wont_run` but will
+    # return code 1 out of the function because fn_that_returns_1 ran last.
+    return 0
+}
+
 parse_args() {
     # Reset shared-state globals to defaults on each invocation so repeated
     # calls (e.g. in tests) don't see stale values.
@@ -644,95 +733,6 @@ parse_args() {
                 ;;
         esac
     done
-}
-
-render_output() {
-    # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
-    # Uses the shared state globals documented above parse_args.
-
-    _use_color=false
-    case "$color_mode" in
-        auto)  [[ -t 1 ]] && _use_color=true  ;;
-        color)               _use_color=true  ;;
-        plain)               _use_color=false ;;
-    esac
-
-    _short_mode=false
-    [[ "$display" = "short" ]] && _short_mode=true
-
-    local ts_prefix=""
-    if "$date_mode"
-    then
-        if "$one_line"
-        then
-            ts_prefix="$(timestamp "$numbers_mode"), "
-        else
-            ts_prefix="$(timestamp "$numbers_mode") "
-        fi
-    fi
-
-    local timedate joined=""
-    while IFS=, read -r _period _percent timedate
-    do
-        if [[ "$only_period" != "all" && "$_period" != "$only_period" ]]
-        then
-            continue
-        fi
-
-        if [[ "$only_field" = "bar" || "$only_field" = "percent" ]]
-        then
-            _duration=""
-        elif "$numbers_mode"
-        then
-            _duration=$(seconds_until_iso "$timedate")
-        elif "$_short_mode" || "$one_line"
-        then
-            _duration=$(human_readable_short "$timedate")
-        else
-            _duration=$(human_readable "$timedate")
-        fi
-
-        local line
-        line=$(format_entry)
-        if "$one_line"
-        then
-            joined="${joined:+$joined, }$line"
-        else
-            printf '%s\n' "${ts_prefix}${line}"
-        fi
-    done
-
-    if "$one_line" && [[ -n "$joined" ]]
-    then
-        printf '%s\n' "${ts_prefix}${joined}"
-    fi
-}
-
-validate_width() {
-    if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
-    then
-        if [[ "$display"    = "short"   || "$one_line"   = true
-           || "$only_field" = "percent" || "$only_field" = "datetime" ]]
-        then
-            width=0
-        else
-            width=8
-        fi
-    fi
-
-    [[ "$width" =~ ^[0-9]+$ ]] \
-        || exit_fail "width must be a number (got '$width')"
-    (( width < 0 || width > 13 )) \
-        && exit_fail "width must be between 0 and 13 (got '$width')"
-    [[ "$display" = "short" && "$one_line" = true ]] \
-        && exit_fail "--short and --one-line are mutually exclusive"
-    [[ "$only_field" = "bar" && "$width" = "0" ]] \
-        && exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
-
-    # Explicit return 0 to prevent return codes leaking.  For example,
-    # `fn_that_returns_1 && fn_wont_run` won't run `fn_wont_run` but will
-    # return code 1 out of the function because fn_that_returns_1 ran last.
-    return 0
 }
 
 main() {
