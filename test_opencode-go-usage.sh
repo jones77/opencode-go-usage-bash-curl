@@ -391,6 +391,16 @@ parse_args -c
 assert_eq "color" "$color_mode" "parse_args -c sets color_mode=color"
 parse_args -p
 assert_eq "plain" "$color_mode" "parse_args -p sets color_mode=plain"
+
+# parse_args: --plain wins over --color regardless of argument order.
+parse_args -p -c
+assert_eq "plain" "$color_mode" "parse_args -p -c plain wins"
+parse_args -c -p
+assert_eq "plain" "$color_mode" "parse_args -c -p plain wins"
+parse_args --plain --color
+assert_eq "plain" "$color_mode" "parse_args --plain --color plain wins"
+parse_args --color --plain
+assert_eq "plain" "$color_mode" "parse_args --color --plain plain wins"
 parse_args -d
 assert_eq "true" "$date_mode" "parse_args -d sets date_mode=true"
 parse_args -n

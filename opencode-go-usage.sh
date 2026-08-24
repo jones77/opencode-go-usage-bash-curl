@@ -366,34 +366,6 @@ readonly -A _long_alias=(
     [width]=w
 )
 
-# Shared state: The following globals are set by: parse_args, apply_option
-#               and consumed by: main, render_output, format_entry
-#
-# Keep them in sync across these functions!
-#
-#       bar_style      "vertical" | "horizontal" | "gradient"
-#       bar_style_set  true | false
-#       color_mode     "auto" | "color" | "plain"
-#       date_mode      true | false
-#       display        "full" | "short"
-#       force          true | false
-#       numbers_mode   true | false
-#       one_line       true | false
-#       only_period    "all" | "rolling" | "weekly" | "monthly"
-#       only_field     "none" | "bar" | "percent" | "datetime"
-#       width          bar width (numeric string), "" means "use default"
-bar_style="vertical"
-bar_style_set=false
-color_mode="auto"
-date_mode=false
-display="full"
-force=false
-numbers_mode=false
-one_line=false
-only_period="all"
-only_field="none"
-width=""
-
 format_entry() {
     local period="$1" percent="$2" duration="$3" use_color="$4"
     [[ -n "$period" ]] || exit_fail "unexpected period: '$period'"
@@ -480,7 +452,14 @@ apply_option() {
     local short="$1" arg="${2:-}"
     case "$short" in
         h) usage; exit 0 ;;
-        c) color_mode="color" ;;
+        c)
+            # --plain wins over --color regardless of argument order: only
+            # p) ever sets color_mode to "plain", so it doubles as a sentinel.
+            if [[ "$color_mode" != "plain" ]]
+            then
+                color_mode="color"
+            fi
+            ;;
         p) color_mode="plain" ;;
         d) date_mode=true ;;
         f) force=true ;;
@@ -624,9 +603,24 @@ validate_width() {
     return 0
 }
 
-parse_args() {
-    # Reset shared-state globals to defaults on each invocation so repeated
-    # calls (e.g. in tests) don't see stale values.
+# Shared state, the following configuration globals are
+# -      set by: parse_args, apply_option
+# - consumed by: render_output, format_entry
+#
+# Keep them in sync across these functions!
+#
+# bar_style      "vertical" | "horizontal" | "gradient"
+# bar_style_set  true | false
+# color_mode     "auto" | "color" | "plain"
+# date_mode      true | false
+# display        "full" | "short"
+# force          true | false
+# numbers_mode   true | false
+# one_line       true | false
+# only_period    "all" | "rolling" | "weekly" | "monthly"
+# only_field     "none" | "bar" | "percent" | "datetime"
+# width          bar width (numeric string), "" means "use default"
+init_shared_state() {
     bar_style="vertical"
     bar_style_set=false
     color_mode="auto"
@@ -638,6 +632,12 @@ parse_args() {
     only_period="all"
     only_field="none"
     width=""
+}
+
+parse_args() {
+    # Reset shared-state globals to defaults on each invocation so repeated
+    # calls (e.g. in tests) don't see stale values.
+    init_shared_state
 
     # Separate short and long options before dispatching. Only -w/--width
     # take values, so those two forms must consume their following argument.
