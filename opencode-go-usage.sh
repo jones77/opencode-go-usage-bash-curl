@@ -19,8 +19,7 @@ usage() {
     local use_color=false
     [[ -t 1 ]] && use_color=true
 
-    local rolling="rolling" weekly="weekly" monthly="monthly"
-    local slash="/"
+    local rolling="rolling" weekly="weekly" monthly="monthly" slash="/"
     if "$use_color"
     then
         local rc="${period_color[rolling]}" wc="${period_color[weekly]}" mc="${period_color[monthly]}"
@@ -97,14 +96,21 @@ timestamp() {
     fi
 }
 
-cache_file() {
+cache_abs_path() {
+    local tmp_cache="${TMPDIR:-/tmp}/$cache_filename"
     local local_cache="$progdir/$cache_filename"
-    if touch "$local_cache.$$" 2>/dev/null
+
+    if touch        "$local_cache.$$" 2>/dev/null
     then
-        rm -f "$local_cache.$$"
+        rm -f       "$local_cache.$$"
         printf '%s' "$local_cache"
+    elif touch      "$tmp_cache.$$"   2>/dev/null
+    then
+        rm -f       "$tmp_cache.$$"
+        printf '%s' "$tmp_cache"
     else
-        printf '%s' "${TMPDIR:-/tmp}/$cache_filename"
+        exit_fail "can't cache: no permissions to create" \
+            "'$local_cache' or '$tmp_cache'"
     fi
 }
 
@@ -218,6 +224,10 @@ bar() {
     # Total sub-steps, split into full cells + the partial step.
     # Integer division truncates down, we never show a step we haven't reached.
     local total=$(( percent * width * steps_per_cell / 100 ))
+    if (( total < 0 )) # Clamp in case the API ever returns a negative percent.
+    then
+        total=0
+    fi
     local int=$((   total / steps_per_cell ))
     local steps=$(( total % steps_per_cell ))
 
@@ -267,23 +277,23 @@ except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
 }
 
 read_cache() {
-    local cache_file="$1"
+    local cache="$1"
     local period percent reset n=0 buf=""
     while IFS=, read -r period percent reset
     do
         [[ -n "$period" ]] || continue
         buf="$buf$period,$percent,$reset"$'\n'
         n=$((n + 1))
-    done < "$cache_file"
+    done < "$cache"
 
     (( n != 3 )) && \
-        exit_fail "expected cache_file='$cache_file' to have 3 lines in it"
+        exit_fail "expected cache='$cache' to have 3 lines in it"
 
     printf '%s' "$buf"
 }
 
 fetch_api() {
-    local cache_file="$1"
+    local cache="$1"
 
     # Save the current options and temporarily disable tracing
     # to keep the bearer token out of debug output.
@@ -326,11 +336,10 @@ response: '$body'"
     (( line_count != 3 )) && \
         exit_fail "expected API response to contain 3 periods"
 
-    local tmp="$cache_file.$$"
-    if printf '%s\n' "$parsed" > "$tmp" 2>/dev/null
+    local tmp="$cache.$$"
+    if ! printf '%s\n' "$parsed" > "$tmp" 2>/dev/null \
+        || ! mv -f "$tmp" "$cache" 2>/dev/null
     then
-        mv -f "$tmp" "$cache_file" 2>/dev/null
-    else
         rm -f "$tmp"
     fi
 
@@ -579,7 +588,7 @@ render_output() {
 
 load_lines() {
     local cache_path
-    cache_path=$(cache_file)
+    cache_path=$(cache_abs_path)
     local now mtime=0
     now=$(date +%s)
 
@@ -600,8 +609,11 @@ load_lines() {
 validate_width() {
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
-        if [[ "$display"    = "short"   || "$one_line"   = true
-           || "$only_field" = "percent" || "$only_field" = "datetime" ]]
+        if [[ "$only_field" = "bar" ]]
+        then
+            width=8
+        elif [[ "$display"    = "short"   || "$one_line"   = true
+             || "$only_field" = "percent" || "$only_field" = "datetime" ]]
         then
             width=0
         else

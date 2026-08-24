@@ -74,7 +74,7 @@ Copy the example env file: `cp .env.example .env`
 
 Then edit `.env` and replace `your-api-key-here` with your actual key.
 The `.env` file is `.gitignore`d which (allegedly)
-will prevent it's accidental commital.
+will prevent its accidental committal.
 
 ## Tests
 

@@ -454,8 +454,6 @@ assert_args_fail "parse_args rejects --only-rolling --only-weekly" --only-rollin
 assert_args_fail "parse_args rejects --only-weekly --only-monthly" --only-weekly --only-monthly
 assert_args_fail "parse_args rejects removed -r option" -r
 assert_args_fail "parse_args rejects removed --percent option" --percent
-assert_args_fail "main rejects --only-bar --short" --only-bar --short
-assert_args_fail "main rejects --only-bar --one-line" --only-bar --one-line
 
 # validate_width: default-width logic (success cases, in-process).
 # Each call resets shared state via parse_args, then validate_width sets width.
@@ -478,6 +476,14 @@ assert_eq "0" "$width" "validate_width default width for --only-datetime is 0"
 parse_args --only-bar
 validate_width
 assert_eq "8" "$width" "validate_width default width for --only-bar is 8"
+
+parse_args --only-bar --short
+validate_width
+assert_eq "8" "$width" "validate_width default width for --only-bar --short is 8"
+
+parse_args --only-bar --one-line
+validate_width
+assert_eq "8" "$width" "validate_width default width for --only-bar --one-line is 8"
 
 parse_args
 validate_width
@@ -561,6 +567,18 @@ output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z
     | render_output)
 assert_eq " weekly 55% DURATION" "$output" \
     "render_output --only-weekly filters periods"
+
+# render_output: --only-bar with --short shows the bar at default width (8).
+reset_render_output_state
+only_field="bar"
+display="short"
+width="8"
+output=$(printf 'rolling,50,2026-08-23T15:00:00Z\nweekly,50,2026-08-23T14:00:00Z\nmonthly,50,2026-08-23T13:00:00Z\n' \
+    | render_output)
+assert_eq "████␣␣␣␣
+████␣␣␣␣
+████␣␣␣␣" "$output" \
+    "render_output --only-bar --short shows bar at width 8"
 
 # Restore the real functions.
 unset -f timestamp human_readable_short seconds_until_iso human_readable
