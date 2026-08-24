@@ -53,15 +53,11 @@ Bar styles (-v/-z/-g) are mutually exclusive; -v is the default, ␣ means empty
         --only-${rolling_str}${slash}${weekly_str}${slash}${monthly_str}
             only show one period: ${rolling_str} ${slash} ${weekly_str} ${slash} ${monthly_str}
 
-The -g, gradient bar uses four shades with 4 steps per cell:        ␣░▒▓█
-                                                                    01234
+All styles use an empty cell, ␣.  The gradient bar uses four shades: ␣░▒▓█
 The default vertical bar fills bottom-to-top with 8 steps per cell:  ␣▁▂▃▄▅▆▇█
-                                                                    012345678
-The -z, horizontal bar fills left-to-right with 8 steps per cell:   ␣▏▎▍▌▋▊▉█
-                                                                    012345678
-13 is the maximum width because OpenCode Go's API doesn't use decimals.
+The -z, horizontal bar fills left-to-right with 8 steps per cell:    ␣▏▎▍▌▋▊▉█
 
-  Width  One step   One cell  50% -v/--vertical  50% -z/--horizontal
+  Width  One step   One cell  67% -v/--vertical  67% -z/--horizontal
 $(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
   do
       case "$ww" in
@@ -79,7 +75,7 @@ $(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
           2)  step="6.25";   cell="50" ;;
           1)  step="12.5";   cell="100" ;;
       esac
-      vbar="$(_bar 50 "$ww" vertical)"
+      vbar="$(_bar 67 "$ww" vertical)"
       hbar="$(_bar 50 "$ww" horizontal)"
       # printf field widths count bytes, but the bar glyphs are 3-byte UTF-8
       # characters, so pad manually to a 17-character field.
