@@ -10,12 +10,12 @@ readonly progdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly cache_filename=".opencode-go-usage-cache"
 readonly cache_filename_ttl=120
 
-_exit_fail() {
+exit_fail() {
     echo "$progname: error: $*" >&2
     exit 1
 }
 
-_usage() {
+usage() {
     local use_color=false
     [[ -t 1 ]] && use_color=true
 
@@ -75,8 +75,8 @@ $(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
           2)  step="6.25";   cell="50" ;;
           1)  step="12.5";   cell="100" ;;
       esac
-      vbar="$(_bar 67 "$ww" vertical)"
-      hbar="$(_bar 50 "$ww" horizontal)"
+      vbar="$(bar 67 "$ww" vertical)"
+      hbar="$(bar 50 "$ww" horizontal)"
       # printf field widths count bytes, but the bar glyphs are 3-byte UTF-8
       # characters, so pad manually to a 17-character field.
       printf '  %5d  %7.4f%% %9.4f%%  %s%*s  %s%*s\n' \
@@ -87,7 +87,7 @@ $(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
 EOF
 }
 
-_timestamp() {
+timestamp() {
     local numbers_mode="$1"
     if "$numbers_mode"
     then
@@ -97,7 +97,7 @@ _timestamp() {
     fi
 }
 
-_cache_file() {
+cache_file() {
     local local_cache="$progdir/$cache_filename"
     if touch "$local_cache.$$" 2>/dev/null
     then
@@ -108,14 +108,14 @@ _cache_file() {
     fi
 }
 
-_mtime_seconds() {
+mtime_seconds() {
     local file="$1"
     stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null
 }
 
 readonly -A period_color=([rolling]=27 [weekly]=28 [monthly]=166)
 
-_format_duration() {
+format_duration() {
     declare -A args=(
         [d]=$1
         [h]=$2
@@ -140,7 +140,7 @@ _format_duration() {
 
 # Portable ISO-8601 -> seconds-until-target.  Uses python3 so we don't
 # depend on GNU date -d.  Naive strings are interpreted as UTC.
-_seconds_until_iso() {
+seconds_until_iso() {
     python3 -c '
 import sys, datetime
 s = sys.argv[1]
@@ -157,11 +157,11 @@ print(int((dt - now).total_seconds()))
 ' "$1"
 }
 
-_duration_from_iso8601() {
+duration_from_iso8601() {
     local iso8601_date="$1"
     local diff
-    diff=$(_seconds_until_iso "$iso8601_date") \
-        || _exit_fail "failed to parse ISO timestamp: $iso8601_date"
+    diff=$(seconds_until_iso "$iso8601_date") \
+        || exit_fail "failed to parse ISO timestamp: $iso8601_date"
     (( diff < 0 )) && diff=0
 
     local days=$((    diff / 86400))
@@ -172,15 +172,15 @@ _duration_from_iso8601() {
     echo "$days" "$hours" "$minutes" "$seconds"
 }
 
-_human_readable() {
+human_readable() {
     local   days hours minutes seconds
-    read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
-    _format_duration "$days" "$hours" "$minutes" "$seconds"
+    read -r days hours minutes seconds <<< "$(duration_from_iso8601 "$1")"
+    format_duration "$days" "$hours" "$minutes" "$seconds"
 }
 
-_human_readable_short() {
+human_readable_short() {
     local   days hours minutes seconds
-    read -r days hours minutes seconds <<< "$(_duration_from_iso8601 "$1")"
+    read -r days hours minutes seconds <<< "$(duration_from_iso8601 "$1")"
 
     local parts=()
     (( days > 0 ))    && parts+=("${days}d")
@@ -199,7 +199,7 @@ _human_readable_short() {
     fi
 }
 
-_bar() {
+bar() {
     local percent="$1"
     local width="$2"
     local style="${3:-vertical}"
@@ -212,7 +212,7 @@ _bar() {
           gradient) steps_per_cell=4; partial=(░ ▒ ▓) ;;
         horizontal) steps_per_cell=8; partial=(▏ ▎ ▍ ▌ ▋ ▊ ▉) ;;
           vertical) steps_per_cell=8; partial=(▁ ▂ ▃ ▄ ▅ ▆ ▇) ;;
-                 *) _exit_fail "unknown bar style: '$style'" ;;
+                 *) exit_fail "unknown bar style: '$style'" ;;
     esac
 
     # Total sub-steps, split into full cells + the partial step.
@@ -251,7 +251,7 @@ _bar() {
     done
 }
 
-_parse_usage_json() {
+parse_usage_json() {
     python3 -c '
 import json, sys
 try:
@@ -266,7 +266,7 @@ except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
 '
 }
 
-_read_cache() {
+read_cache() {
     local cache_file="$1"
     local period percent reset n=0 buf=""
     while IFS=, read -r period percent reset
@@ -277,12 +277,12 @@ _read_cache() {
     done < "$cache_file"
 
     (( n != 3 )) && \
-        _exit_fail "expected cache_file='$cache_file' to have 3 lines in it"
+        exit_fail "expected cache_file='$cache_file' to have 3 lines in it"
 
     printf '%s' "$buf"
 }
 
-_fetch_api() {
+fetch_api() {
     local cache_file="$1"
 
     # Save the current options and temporarily disable tracing
@@ -292,9 +292,9 @@ _fetch_api() {
 
     # shellcheck disable=SC1091 # associative-array keys, not variables
     source "$progdir/.env" \
-        || _exit_fail "expected to source ./.env to get OPENCODE_GO_API_KEY"
+        || exit_fail "expected to source ./.env to get OPENCODE_GO_API_KEY"
     [[ -n "${OPENCODE_GO_API_KEY:-}" ]] \
-        || _exit_fail ".env must define OPENCODE_GO_API_KEY"
+        || exit_fail ".env must define OPENCODE_GO_API_KEY"
     local curl_exit=0 response
     # Using `printf | curl` to prevent ps from seeing the API_KEY.
     response=$(printf 'Authorization: Bearer %s\n' "$OPENCODE_GO_API_KEY" \
@@ -307,24 +307,24 @@ _fetch_api() {
     [[ "$saved_opts" == *x* ]] && set -x
     [[ "$saved_opts" == *v* ]] && set -v
 
-    (( curl_exit != 0 )) && _exit_fail \
+    (( curl_exit != 0 )) && exit_fail \
         "curl failed with exit code $curl_exit (connection error)"
 
     local -r http_status="${response:${#response}-3}"
     local -r body="${response:0:${#response}-3}"
 
-    (( http_status != 200 )) && _exit_fail \
+    (( http_status != 200 )) && exit_fail \
         "API request failed with status: $http_status
 response: '$body'"
 
     local parsed
-    parsed=$(_parse_usage_json <<< "$body") \
-        || _exit_fail "failed to parse API response"
+    parsed=$(parse_usage_json <<< "$body") \
+        || exit_fail "failed to parse API response"
 
     local line_count
     line_count=$(printf '%s\n' "$parsed" | wc -l)
     (( line_count != 3 )) && \
-        _exit_fail "expected API response to contain 3 periods"
+        exit_fail "expected API response to contain 3 periods"
 
     local tmp="$cache_file.$$"
     if printf '%s\n' "$parsed" > "$tmp" 2>/dev/null
@@ -337,28 +337,28 @@ response: '$body'"
     printf '%s\n' "$parsed"
 }
 
-_load_lines() {
-    local cache_file
-    cache_file=$(_cache_file)
+load_lines() {
+    local cache_path
+    cache_path=$(cache_file)
     local now mtime=0
     now=$(date +%s)
 
-    if [[ -f "$cache_file" ]]
+    if [[ -f "$cache_path" ]]
     then
-        mtime=$(_mtime_seconds "$cache_file" 2>/dev/null) || mtime=0
+        mtime=$(mtime_seconds "$cache_path" 2>/dev/null) || mtime=0
         mtime=${mtime:-0}
     fi
 
     if [[ "$force" != true ]] && (( now - mtime < cache_filename_ttl ))
     then
-        _read_cache "$cache_file"
+        read_cache "$cache_path"
     else
-        _fetch_api "$cache_file"
+        fetch_api "$cache_path"
     fi
 }
 
-# Option metadata used by _parse_args. getopts consumes _optstring;
-# the long_alias map lets the long-option loop dispatch through _apply_option.
+# Option metadata used by parse_args. getopts consumes _optstring;
+# the long_alias map lets the long-option loop dispatch through apply_option.
 readonly _optstring=":hcpdn1svzgw:f"
 
 # shellcheck disable=SC2154  # associative-array keys, not variables
@@ -377,8 +377,8 @@ readonly -A _long_alias=(
     [width]=w
 )
 
-# Shared state: The following globals are set by: _parse_args, _apply_option
-#               and consumed by: _main, _render_output, _format_entry
+# Shared state: The following globals are set by: parse_args, apply_option
+#               and consumed by: main, render_output, format_entry
 #
 # Keep them in sync across these functions!
 #
@@ -394,7 +394,7 @@ readonly -A _long_alias=(
 #       only_field     "none" | "bar" | "percent" | "datetime"
 #       width          bar width (numeric string), "" means "use default"
 #
-# Additional shared state set by _render_output and consumed by _format_entry:
+# Additional shared state set by render_output and consumed by format_entry:
 #
 #       _duration      formatted reset-time string
 #       _percent       current period percent (integer)
@@ -419,9 +419,9 @@ _period=""
 _short_mode=false
 _use_color=false
 
-_format_entry() {
+format_entry() {
     local short_period="$_period"
-    [[ -n "$short_period" ]] || _exit_fail "unexpected period: '$_period'"
+    [[ -n "$short_period" ]] || exit_fail "unexpected period: '$_period'"
 
     local color_esc="" reset_esc=""
     if "$_use_color"
@@ -434,7 +434,7 @@ _format_entry() {
         bar)
             printf "%s%s%s" \
                 "$color_esc" \
-                "$(_bar "$_percent" "$width" "$bar_style")" "$reset_esc"
+                "$(bar "$_percent" "$width" "$bar_style")" "$reset_esc"
             return
             ;;
         percent)
@@ -465,8 +465,8 @@ _format_entry() {
             ;;
     esac
 
-    local bar=""
-    (( width > 0 )) && bar=" $(_bar "$_percent" "$width" "$bar_style")"
+    local bar_out=""
+    (( width > 0 )) && bar_out=" $(bar "$_percent" "$width" "$bar_style")"
 
     local prefix="" pfmt="%.0f" dfmt="%s"
     if "$_short_mode"
@@ -495,13 +495,13 @@ _format_entry() {
 
     # pfmt/dfmt/pct are controlled format fragments, not user input.
     printf "%s%s${pfmt}${pct}%s${dur_sep}${dfmt}%s" \
-        "$color_esc" "$prefix" "$_percent" "$bar" "$_duration" "$reset_esc"
+        "$color_esc" "$prefix" "$_percent" "$bar_out" "$_duration" "$reset_esc"
 }
 
-_apply_option() {
+apply_option() {
     local short="$1" arg="${2:-}"
     case "$short" in
-        h) _usage; exit 0 ;;
+        h) usage; exit 0 ;;
         c) color_mode="color" ;;
         p) color_mode="plain" ;;
         d) date_mode=true ;;
@@ -510,32 +510,32 @@ _apply_option() {
         1) one_line=true ;;
         s) display="short" ;;
         v|z|g)
-            [[ "$bar_style_set" == true ]] && _exit_fail "styles are exclusive"
+            [[ "$bar_style_set" == true ]] && exit_fail "styles are exclusive"
             case "$short" in v) bar_style="vertical"   ;;
                              z) bar_style="horizontal" ;;
                              g) bar_style="gradient"   ;; esac
             bar_style_set=true
             ;;
         w) width="$arg" ;;
-        *) _exit_fail "unknown option: -$short" ;;
+        *) exit_fail "unknown option: -$short" ;;
     esac
 }
 
-_set_only_field() {
+set_only_field() {
     local new="$1"
     [[ "$only_field" != "none" ]] \
-        && _exit_fail "--only-* options are mutually exclusive"
+        && exit_fail "--only-* options are mutually exclusive"
     only_field="$new"
 }
 
-_set_only_period() {
+set_only_period() {
     local new="$1"
     [[ "$only_period" != "all" ]] \
-        && _exit_fail "--only-rolling/-weekly/-monthly are mutually exclusive"
+        && exit_fail "--only-rolling/-weekly/-monthly are mutually exclusive"
     only_period="$new"
 }
 
-_parse_args() {
+parse_args() {
     # Reset shared-state globals to defaults on each invocation so repeated
     # calls (e.g. in tests) don't see stale values.
     bar_style="vertical"
@@ -558,7 +558,7 @@ _parse_args() {
     do
         case "$1" in
             --width)
-                (( $# < 2 )) && _exit_fail "--width requires a value"
+                (( $# < 2 )) && exit_fail "--width requires a value"
                 long_args+=("$1" "$2")
                 shift 2
                 ;;
@@ -567,22 +567,22 @@ _parse_args() {
                 shift
                 ;;
             -w)
-                (( $# < 2 )) && _exit_fail "-w requires a value"
+                (( $# < 2 )) && exit_fail "-w requires a value"
                 short_args+=("$1" "$2")
                 shift 2
                 ;;
             -*)
                 if [[ "$1" == "-" ]]
                 then
-                    _usage
-                    _exit_fail "unknown argument: '-'"
+                    usage
+                    exit_fail "unknown argument: '-'"
                 fi
                 short_args+=("$1")
                 shift
                 ;;
             *)
-                _usage
-                _exit_fail "unknown argument: '$1'"
+                usage
+                exit_fail "unknown argument: '$1'"
                 ;;
         esac
     done
@@ -591,13 +591,13 @@ _parse_args() {
     while getopts "$_optstring" opt "${short_args[@]}"
     do
         case "$opt" in
-            \?) _exit_fail "unknown option: -$OPTARG" ;;
-             :) _exit_fail "-$OPTARG requires a value" ;;
+            \?) exit_fail "unknown option: -$OPTARG" ;;
+             :) exit_fail "-$OPTARG requires a value" ;;
              *) if [[ "$opt" == "w" ]]
                 then
-                    _apply_option "$opt" "$OPTARG"
+                    apply_option "$opt" "$OPTARG"
                 else
-                    _apply_option "$opt"
+                    apply_option "$opt"
                 fi
              ;;
         esac
@@ -613,42 +613,42 @@ _parse_args() {
             --width)
                 if (( $# == 0 ))
                 then
-                    _exit_fail "--width requires a value"
+                    exit_fail "--width requires a value"
                 fi
-                _apply_option "w" "$1"
+                apply_option "w" "$1"
                 shift
                 ;;
-            --only-bar)      _set_only_field  "bar"      ;;
-            --only-percent)  _set_only_field  "percent"  ;;
-            --only-datetime) _set_only_field  "datetime" ;;
-            --only-rolling)  _set_only_period "rolling"  ;;
-            --only-weekly)   _set_only_period "weekly"   ;;
-            --only-monthly)  _set_only_period "monthly"  ;;
+            --only-bar)      set_only_field  "bar"      ;;
+            --only-percent)  set_only_field  "percent"  ;;
+            --only-datetime) set_only_field  "datetime" ;;
+            --only-rolling)  set_only_period "rolling"  ;;
+            --only-weekly)   set_only_period "weekly"   ;;
+            --only-monthly)  set_only_period "monthly"  ;;
             --*)
                 local name="${arg#--}"
                 local short
                 short="${_long_alias[$name]:-}"
                 if [[ -z "$short" ]]
                 then
-                    _usage
-                    _exit_fail "unknown argument: '$arg'"
+                    usage
+                    exit_fail "unknown argument: '$arg'"
                 fi
                 if [[ "$short" == "w" ]]
                 then
-                    (( $# == 0 )) && _exit_fail "--$name requires a value"
-                    _apply_option "$short" "$1"
+                    (( $# == 0 )) && exit_fail "--$name requires a value"
+                    apply_option "$short" "$1"
                     shift
                 else
-                    _apply_option "$short"
+                    apply_option "$short"
                 fi
                 ;;
         esac
     done
 }
 
-_render_output() {
+render_output() {
     # Reads and renders the "period,percent,resetsAt" CSV lines from stdin.
-    # Uses the shared state globals documented above _parse_args.
+    # Uses the shared state globals documented above parse_args.
 
     _use_color=false
     case "$color_mode" in
@@ -660,14 +660,14 @@ _render_output() {
     _short_mode=false
     [[ "$display" = "short" ]] && _short_mode=true
 
-    local timestamp=""
+    local ts_prefix=""
     if "$date_mode"
     then
         if "$one_line"
         then
-            timestamp="$(_timestamp "$numbers_mode"), "
+            ts_prefix="$(timestamp "$numbers_mode"), "
         else
-            timestamp="$(_timestamp "$numbers_mode") "
+            ts_prefix="$(timestamp "$numbers_mode") "
         fi
     fi
 
@@ -684,31 +684,31 @@ _render_output() {
             _duration=""
         elif "$numbers_mode"
         then
-            _duration=$(_seconds_until_iso "$timedate")
+            _duration=$(seconds_until_iso "$timedate")
         elif "$_short_mode" || "$one_line"
         then
-            _duration=$(_human_readable_short "$timedate")
+            _duration=$(human_readable_short "$timedate")
         else
-            _duration=$(_human_readable "$timedate")
+            _duration=$(human_readable "$timedate")
         fi
 
         local line
-        line=$(_format_entry)
+        line=$(format_entry)
         if "$one_line"
         then
             joined="${joined:+$joined, }$line"
         else
-            printf '%s\n' "${timestamp}${line}"
+            printf '%s\n' "${ts_prefix}${line}"
         fi
     done
 
     if "$one_line" && [[ -n "$joined" ]]
     then
-        printf '%s\n' "${timestamp}${joined}"
+        printf '%s\n' "${ts_prefix}${joined}"
     fi
 }
 
-_validate_width() {
+validate_width() {
     if [[ -z "$width" ]]  # Default width: 0 for compact views, 8 otherwise
     then
         if [[ "$display"    = "short"   || "$one_line"   = true
@@ -721,13 +721,13 @@ _validate_width() {
     fi
 
     [[ "$width" =~ ^[0-9]+$ ]] \
-        || _exit_fail "width must be a number (got '$width')"
+        || exit_fail "width must be a number (got '$width')"
     (( width < 0 || width > 13 )) \
-        && _exit_fail "width must be between 0 and 13 (got '$width')"
+        && exit_fail "width must be between 0 and 13 (got '$width')"
     [[ "$display" = "short" && "$one_line" = true ]] \
-        && _exit_fail "--short and --one-line are mutually exclusive"
+        && exit_fail "--short and --one-line are mutually exclusive"
     [[ "$only_field" = "bar" && "$width" = "0" ]] \
-        && _exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
+        && exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
 
     # Explicit return 0 to prevent return codes leaking.  For example,
     # `fn_that_returns_1 && fn_wont_run` won't run `fn_wont_run` but will
@@ -735,14 +735,14 @@ _validate_width() {
     return 0
 }
 
-_main() {
-    _parse_args "$@"
-    _validate_width
-    _load_lines | _render_output
+main() {
+    parse_args "$@"
+    validate_width
+    load_lines | render_output
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
 then
     cd "$progdir" || exit 1
-    _main "$@"
+    main "$@"
 fi

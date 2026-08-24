@@ -3,49 +3,89 @@
 # Focus on deterministic internals (bar cells/steps, duration formatting),
 # not full output layouts which are brittle.
 set -uo pipefail
-# Do not use set -e; assertions collect failures via ||.
+# Do not use set -e: assertions must not abort the suite, and some stubbed
+# subprocesses are expected to return non-zero (collected via if/||).
 
 # shellcheck source=/dev/null
 source ./opencode-go-usage.sh
 set +e  # undo set -e inherited from the sourced script
 
+# TAP test counter and pass/fail tallies.
+n=0
 pass=0
 fail=0
 
+# Derive expected color escapes from the live period_color map so the
+# format_entry color tests don't silently break if the rolling color changes.
+# shellcheck disable=SC2154  # period_color is assigned by the sourced script
+readonly rolling_color_esc=$(printf '\033[38;5;%sm' "${period_color[rolling]}")
+readonly color_reset=$'\033[39m'
+
 assert_eq() {
     local expected="$1" actual="$2" name="$3"
+    n=$((n + 1))
     if [[ "$expected" == "$actual" ]]
     then
         pass=$((pass + 1))
-        echo "ok - $name"
+        printf 'ok %d - %s\n' "$n" "$name"
     else
         fail=$((fail + 1))
-        echo "not ok - $name"
-        printf '  expected: %q\n' "$expected"
-        printf '  actual:   %q\n' "$actual"
+        printf 'not ok %d - %s\n' "$n" "$name"
+        printf '# expected: %q\n' "$expected"
+        printf '# actual:   %q\n' "$actual"
+    fi
+}
+
+assert_match() {
+    local pattern="$1" actual="$2" name="$3"
+    n=$((n + 1))
+    if [[ "$actual" =~ $pattern ]]
+    then
+        pass=$((pass + 1))
+        printf 'ok %d - %s\n' "$n" "$name"
+    else
+        fail=$((fail + 1))
+        printf 'not ok %d - %s\n' "$n" "$name"
+        printf '# expected pattern: %s\n' "$pattern"
+        printf '# actual:           %q\n' "$actual"
+    fi
+}
+
+assert_nonzero() {
+    local rc="$1" name="$2"
+    n=$((n + 1))
+    if (( rc != 0 ))
+    then
+        pass=$((pass + 1))
+        printf 'ok %d - %s\n' "$n" "$name"
+    else
+        fail=$((fail + 1))
+        printf 'not ok %d - %s\n' "$n" "$name"
+        printf '# expected non-zero exit, got 0\n'
     fi
 }
 
 assert_bar_width() {
     local percent="$1" width="$2" name="$3" style="${4:-vertical}"
     local output
-    output=$(_bar "$percent" "$width" "$style")
+    output=$(bar "$percent" "$width" "$style")
+    n=$((n + 1))
     if (( ${#output} == width ))
     then
         pass=$((pass + 1))
-        echo "ok - $name"
+        printf 'ok %d - %s\n' "$n" "$name"
     else
         fail=$((fail + 1))
-        echo "not ok - $name"
-        printf '  expected width: %d\n' "$width"
-        printf '  actual width:   %d (%q)\n' "${#output}" "$output"
+        printf 'not ok %d - %s\n' "$n" "$name"
+        printf '# expected width: %d\n' "$width"
+        printf '# actual width:   %d (%q)\n' "${#output}" "$output"
     fi
 }
 
 assert_bar_chars_valid() {
     local percent="$1" width="$2" name="$3" style="${4:-vertical}"
     local output bad valid
-    output=$(_bar "$percent" "$width" "$style")
+    output=$(bar "$percent" "$width" "$style")
     case "$style" in
         vertical)   valid='␣▁▂▃▄▅▆▇█' ;;
         horizontal) valid='␣▏▎▍▌▋▊▉█' ;;
@@ -53,331 +93,482 @@ assert_bar_chars_valid() {
         *)          valid='' ;;
     esac
     bad=$(printf '%s' "$output" | tr -d "$valid")
+    n=$((n + 1))
     if [[ -z "$bad" ]]
     then
         pass=$((pass + 1))
-        echo "ok - $name"
+        printf 'ok %d - %s\n' "$n" "$name"
     else
         fail=$((fail + 1))
-        echo "not ok - $name"
-        printf '  unexpected chars: %q\n' "$bad"
+        printf 'not ok %d - %s\n' "$n" "$name"
+        printf '# unexpected chars: %q\n' "$bad"
     fi
 }
 
-# _bar: width 1 spot checks across the 8 steps.
-assert_eq "␣" "$(_bar 0 1)"   "_bar 0% width 1 (empty)"
-assert_eq "▁" "$(_bar 13 1)"  "_bar ~13% width 1 (step 1)"
-assert_eq "▂" "$(_bar 25 1)"  "_bar ~25% width 1 (step 2)"
-assert_eq "▄" "$(_bar 50 1)"  "_bar ~50% width 1 (step 4)"
-assert_eq "█" "$(_bar 100 1)" "_bar 100% width 1 (full)"
+# Runs the script as a subprocess and asserts it exits non-zero.
+assert_args_fail() {
+    local name="$1"
+    shift
+    n=$((n + 1))
+    if ./opencode-go-usage.sh "$@" >/dev/null 2>&1
+    then
+        fail=$((fail + 1))
+        printf 'not ok %d - %s\n' "$n" "$name"
+    else
+        pass=$((pass + 1))
+        printf 'ok %d - %s\n' "$n" "$name"
+    fi
+}
 
-# _bar: clamping above 100%.
-assert_eq "█" "$(_bar 200 1)" "_bar 200% width 1 (clamp)"
+# Reset the shared-state globals that format_entry reads, to documented
+# defaults. Each format_entry test calls this then overrides only the
+# fields it cares about, so a new required global won't break every test.
+reset_format_entry_state() {
+    _period="rolling"
+    _percent=50
+    _duration="12345"
+    _short_mode=false
+    one_line=false
+    width=0
+    _use_color=false
+    numbers_mode=false
+    bar_style="vertical"
+    only_field="none"
+}
 
-# _bar: width boundaries at empty/full.
-for width in 1 2 3 4 5 6 7 8 9 10 11 12 13
+# Reset the shared-state globals that render_output reads. render_output
+# derives _use_color/_short_mode internally from color_mode/display, so
+# those are not set here.
+reset_render_output_state() {
+    display="full"
+    color_mode="plain"
+    width="0"
+    one_line=false
+    date_mode=false
+    numbers_mode=false
+    bar_style="vertical"
+    only_field="none"
+    only_period="all"
+}
+
+# bar: width 1 spot checks across the 8 steps.
+assert_eq "␣" "$(bar 0 1)"   "bar 0% width 1 (empty)"
+assert_eq "▁" "$(bar 13 1)"  "bar ~13% width 1 (step 1)"
+assert_eq "▂" "$(bar 25 1)"  "bar ~25% width 1 (step 2)"
+assert_eq "▄" "$(bar 50 1)"  "bar ~50% width 1 (step 4)"
+assert_eq "█" "$(bar 100 1)" "bar 100% width 1 (full)"
+
+# bar: clamping boundaries above 100% and at the high step.
+assert_eq "█" "$(bar 101 1)" "bar 101% width 1 clamps to full"
+assert_eq "█" "$(bar 200 1)" "bar 200% width 1 (clamp)"
+assert_eq "▇" "$(bar 99 1)"  "bar 99% width 1 (step 7)"
+
+# bar: negative percent is treated as empty (clamp lower bound).
+assert_eq "␣" "$(bar -5 1)" "bar -5% width 1 (negative treats as empty)"
+
+# bar: width 0 produces an empty string regardless of percent.
+assert_eq "" "$(bar 50 0)" "bar 50% width 0 is empty"
+assert_eq "" "$(bar 0 0)"  "bar 0% width 0 is empty"
+
+# bar: width boundaries at empty/full, including width 0.
+for width in 0 1 2 3 4 5 6 7 8 9 10 11 12 13
 do
-    assert_bar_width 0 "$width" "_bar 0% width $width length"
-    assert_bar_width 100 "$width" "_bar 100% width $width length"
+    assert_bar_width 0 "$width" "bar 0% width $width length"
+    assert_bar_width 100 "$width" "bar 100% width $width length"
 done
 
-# _bar: valid character set for a spread of percents/widths.
-for width in 1 2 4 8 13
- do
+# bar: valid character set for a spread of percents/widths.
+for width in 0 1 2 4 8 13
+do
     for percent in 0 1 12 25 37 50 63 75 87 99 100
     do
-        assert_bar_chars_valid "$percent" "$width" "_bar chars valid $percent% width $width"
+        assert_bar_chars_valid "$percent" "$width" "bar chars valid $percent% width $width"
     done
 done
 
-# _bar: a specific multi-cell layout (matches the usage table).
-assert_eq "██████▄␣␣␣␣␣␣" "$(_bar 50 13)" "_bar 50% width 13 layout"
+# bar: a specific multi-cell layout (matches the usage table).
+assert_eq "██████▄␣␣␣␣␣␣" "$(bar 50 13)" "bar 50% width 13 layout"
 
-# _bar: horizontal style spot checks.
-assert_eq "␣" "$(_bar 0 1 horizontal)"   "_bar horizontal 0% width 1 (empty)"
-assert_eq "▏" "$(_bar 13 1 horizontal)"  "_bar horizontal ~13% width 1 (step 1)"
-assert_eq "▎" "$(_bar 25 1 horizontal)"  "_bar horizontal ~25% width 1 (step 2)"
-assert_eq "▌" "$(_bar 50 1 horizontal)"  "_bar horizontal ~50% width 1 (step 4)"
-assert_eq "█" "$(_bar 100 1 horizontal)" "_bar horizontal 100% width 1 (full)"
-assert_eq "██████▌␣␣␣␣␣␣" "$(_bar 50 13 horizontal)" \
-    "_bar horizontal 50% width 13 layout"
+# bar: horizontal style spot checks.
+assert_eq "␣" "$(bar 0 1 horizontal)"   "bar horizontal 0% width 1 (empty)"
+assert_eq "▏" "$(bar 13 1 horizontal)"  "bar horizontal ~13% width 1 (step 1)"
+assert_eq "▎" "$(bar 25 1 horizontal)"  "bar horizontal ~25% width 1 (step 2)"
+assert_eq "▌" "$(bar 50 1 horizontal)"  "bar horizontal ~50% width 1 (step 4)"
+assert_eq "█" "$(bar 100 1 horizontal)" "bar horizontal 100% width 1 (full)"
+assert_eq "██████▌␣␣␣␣␣␣" "$(bar 50 13 horizontal)" \
+    "bar horizontal 50% width 13 layout"
 
-# _bar: gradient style spot checks.
-assert_eq "␣" "$(_bar 0 1 gradient)"     "_bar gradient 0% width 1 (empty)"
-assert_eq "░" "$(_bar 25 1 gradient)"    "_bar gradient 25% width 1 (step 1)"
-assert_eq "▒" "$(_bar 50 1 gradient)"    "_bar gradient 50% width 1 (step 2)"
-assert_eq "▓" "$(_bar 75 1 gradient)"    "_bar gradient 75% width 1 (step 3)"
-assert_eq "█" "$(_bar 100 1 gradient)"   "_bar gradient 100% width 1 (full)"
-assert_eq "██████▒␣␣␣␣␣␣" "$(_bar 50 13 gradient)" \
-    "_bar gradient 50% width 13 layout"
+# bar: gradient style spot checks.
+assert_eq "␣" "$(bar 0 1 gradient)"     "bar gradient 0% width 1 (empty)"
+assert_eq "░" "$(bar 25 1 gradient)"    "bar gradient 25% width 1 (step 1)"
+assert_eq "▒" "$(bar 50 1 gradient)"    "bar gradient 50% width 1 (step 2)"
+assert_eq "▓" "$(bar 75 1 gradient)"    "bar gradient 75% width 1 (step 3)"
+assert_eq "█" "$(bar 100 1 gradient)"   "bar gradient 100% width 1 (full)"
+assert_eq "██████▒␣␣␣␣␣␣" "$(bar 50 13 gradient)" \
+    "bar gradient 50% width 13 layout"
 
-# _bar: width boundaries at empty/full for all styles.
+# bar: width boundaries at empty/full for all styles.
 for style in vertical horizontal gradient
- do
-    for width in 1 2 3 4 5 6 7 8 9 10 11 12 13
+do
+    for width in 0 1 2 3 4 5 6 7 8 9 10 11 12 13
     do
-        assert_bar_width 0 "$width" "_bar $style 0% width $width length" "$style"
-        assert_bar_width 100 "$width" "_bar $style 100% width $width length" "$style"
+        assert_bar_width 0 "$width" "bar $style 0% width $width length" "$style"
+        assert_bar_width 100 "$width" "bar $style 100% width $width length" "$style"
     done
 done
 
-# _bar: valid character set for a spread of percents/widths for all styles.
+# bar: valid character set for a spread of percents/widths for all styles.
 for style in vertical horizontal gradient
- do
-    for width in 1 2 4 8 13
+do
+    for width in 0 1 2 4 8 13
     do
         for percent in 0 1 12 25 37 50 63 75 87 99 100
         do
             assert_bar_chars_valid "$percent" "$width" \
-                "_bar $style chars valid $percent% width $width" "$style"
+                "bar $style chars valid $percent% width $width" "$style"
         done
     done
 done
 
-# _format_duration: pure formatting logic.
-assert_eq "0s"               "$(_format_duration 0 0 0 0)" "_format_duration all zero"
-assert_eq " 1d  2h  3m  4s"   "$(_format_duration 1 2 3 4)" "_format_duration 1d2h3m4s"
-assert_eq " 1h  1s"           "$(_format_duration 0 1 0 1)" "_format_duration skip zero units"
-assert_eq " 5d"              "$(_format_duration 5 0 0 0)" "_format_duration days only"
+# format_duration: pure formatting logic, including boundaries.
+assert_eq "0s"               "$(format_duration 0 0 0 0)" "format_duration all zero"
+assert_eq " 1s"              "$(format_duration 0 0 0 1)" "format_duration seconds only"
+assert_eq " 1m"              "$(format_duration 0 0 1 0)" "format_duration minutes only"
+assert_eq " 1h"              "$(format_duration 0 1 0 0)" "format_duration hours only"
+assert_eq " 1d"              "$(format_duration 1 0 0 0)" "format_duration days only"
+assert_eq " 1d  2h  3m  4s"   "$(format_duration 1 2 3 4)" "format_duration 1d2h3m4s"
+assert_eq " 5d"              "$(format_duration 5 0 0 0)" "format_duration days only nonzero"
+assert_eq "100d 23h 59m 59s" "$(format_duration 100 23 59 59)" "format_duration large values"
+assert_eq " 2h 30m"          "$(format_duration 0 2 30 0)" "format_duration skip zero units"
 
-# _duration_from_iso8601: past dates clamp to 0 instead of failing.
+# duration_from_iso8601: past dates clamp to 0 instead of failing (real clock).
 assert_eq "0 0 0 0" \
-    "$(_duration_from_iso8601 "2020-01-01T00:00:00Z")" \
-    "_duration_from_iso8601 past date clamps to zero"
+    "$(duration_from_iso8601 "2020-01-01T00:00:00Z")" \
+    "duration_from_iso8601 past date clamps to zero"
 
-# _format_entry: numbers and --only-* modes.
-# Sets _-prefixed globals that _format_entry now reads.
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_field="none"
-assert_eq "rolling 50 12345" \
-    "$(_format_entry)" \
-    "_format_entry numbers full"
+# duration_from_iso8601: real-clock future date yields 4 non-negative ints
+# (the exact value drifts with the wall clock, so only assert the format).
+assert_match '^[0-9]+ [0-9]+ [0-9]+ [0-9]+$' \
+    "$(duration_from_iso8601 "2099-01-01T00:00:00Z")" \
+    "duration_from_iso8601 future date format (real clock)"
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=true one_line=false width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_field="none"
-assert_eq "50   12345" \
-    "$(_format_entry)" \
-    "_format_entry numbers short"
+# duration_from_iso8601: happy path and human_readable*, with seconds_until_iso
+# stubbed to a deterministic clock so the arithmetic is reproducible.
+seconds_until_iso_orig=$(declare -f seconds_until_iso)
+# shellcheck disable=SC2329  # invoked indirectly through duration_from_iso8601
+seconds_until_iso() { printf '%s' "$_stub_secs"; }
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=true width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_field="none"
-assert_eq " 50  12345" \
-    "$(_format_entry)" \
-    "_format_entry numbers one-line"
+_stub_secs=93784  # 1d 2h 3m 4s
+assert_eq "1 2 3 4"            "$(duration_from_iso8601 anything)" "duration_from_iso8601 1d2h3m4s"
+assert_eq " 1d  2h  3m  4s"   "$(human_readable anything)"          "human_readable 1d2h3m4s"
+assert_eq "1d2h"               "$(human_readable_short anything)"   "human_readable_short multi part"
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=true width=0 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_field="none"
-assert_eq " 50%  12345" \
-    "$(_format_entry)" \
-    "_format_entry one-line"
+_stub_secs=0
+assert_eq "0 0 0 0" "$(duration_from_iso8601 anything)" "duration_from_iso8601 zero"
+assert_eq "0s"      "$(human_readable anything)"        "human_readable zero"
+assert_eq "0s"      "$(human_readable_short anything)"   "human_readable_short zero (0 parts)"
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=true bar_style="vertical" only_field="none"
-assert_eq "$(printf '\033[38;5;27m 50  12345\033[39m')" \
-    "$(_format_entry)" \
-    "_format_entry numbers one-line color aligned"
+_stub_secs=60  # 1m
+assert_eq "0 0 1 0" "$(duration_from_iso8601 anything)" "duration_from_iso8601 1m"
+assert_eq " 1m"      "$(human_readable anything)"        "human_readable 1m"
+assert_eq "1m"       "$(human_readable_short anything)"  "human_readable_short single part"
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=false bar_style="vertical" only_field="none"
-assert_eq "$(printf '\033[38;5;27m 50%%  12345\033[39m')" \
-    "$(_format_entry)" \
-    "_format_entry one-line color aligned"
+_stub_secs=3661  # 1h 1m 1s
+assert_eq "0 1 1 1" "$(duration_from_iso8601 anything)" "duration_from_iso8601 1h1m1s"
 
-# _format_entry: numbers mode with a width-8 bar.
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=false width=8 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_field="none"
-assert_eq "rolling 50 ████␣␣␣␣ 12345" \
-    "$(_format_entry)" \
-    "_format_entry numbers full with bar"
+# Restore the real clock before any test that relies on it.
+unset -f seconds_until_iso
+eval "$seconds_until_iso_orig"
 
-# _format_entry: --only-* modes.
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=false width=13 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_field="bar"
-assert_eq "██████▄␣␣␣␣␣␣" \
-    "$(_format_entry)" \
-    "_format_entry only bar"
+# parse_usage_json: well-formed API response yields three CSV lines,
+# with percent coerced to int (75.5 -> 75).
+sample_json='{"usage":{"rolling":{"percent":"50","resetsAt":"2026-12-01T00:00:00Z"},"weekly":{"percent":25,"resetsAt":"2026-12-01T00:00:00Z"},"monthly":{"percent":75.5,"resetsAt":"2026-12-01T00:00:00Z"}}}'
+expected_csv='rolling,50,2026-12-01T00:00:00Z
+weekly,25,2026-12-01T00:00:00Z
+monthly,75,2026-12-01T00:00:00Z'
+assert_eq "$expected_csv" "$(printf '%s' "$sample_json" | parse_usage_json)" \
+    "parse_usage_json well-formed response"
 
-_period="rolling" _percent=50 _duration="" \
-    _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_field="percent"
-assert_eq "50%" \
-    "$(_format_entry)" \
-    "_format_entry only percent"
+# parse_usage_json: malformed JSON exits non-zero with no stdout.
+rc=0
+output=$(printf 'garbage' | parse_usage_json 2>/dev/null) || rc=$?
+assert_eq "" "$output" "parse_usage_json malformed json no stdout"
+assert_nonzero "$rc" "parse_usage_json malformed json exits non-zero"
 
-_period="rolling" _percent=50 _duration="" \
-    _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=true bar_style="vertical" only_field="percent"
-assert_eq "50" \
-    "$(_format_entry)" \
-    "_format_entry only percent with numbers"
+# format_entry: numbers and --only-* modes.
+reset_format_entry_state
+numbers_mode=true
+assert_eq "rolling 50 12345" "$(format_entry)" "format_entry numbers full"
 
-_period="rolling" _percent=50 _duration="" \
-    _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=false bar_style="vertical" only_field="percent"
-assert_eq "$(printf '\033[38;5;27m 50%%\033[39m')" \
-    "$(_format_entry)" \
-    "_format_entry only percent one-line color aligned"
+reset_format_entry_state
+_short_mode=true
+numbers_mode=true
+assert_eq "50   12345" "$(format_entry)" "format_entry numbers short"
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=false width=0 _use_color=false \
-    numbers_mode=false bar_style="vertical" only_field="datetime"
-assert_eq "12345" \
-    "$(_format_entry)" \
-    "_format_entry only datetime"
+reset_format_entry_state
+one_line=true
+numbers_mode=true
+assert_eq " 50  12345" "$(format_entry)" "format_entry numbers one-line"
 
-_period="rolling" _percent=50 _duration="12345" \
-    _short_mode=false one_line=true width=0 _use_color=true \
-    numbers_mode=false bar_style="vertical" only_field="datetime"
-assert_eq "$(printf '\033[38;5;27m 12345\033[39m')" \
-    "$(_format_entry)" \
-    "_format_entry only datetime one-line color aligned"
+reset_format_entry_state
+one_line=true
+assert_eq " 50%  12345" "$(format_entry)" "format_entry one-line"
 
-# _parse_args: --force / -f sets force=true; default is false.
-_parse_args
-# shellcheck disable=SC2154  # force is set by _parse_args
-assert_eq "false" "$force" "_parse_args default force is false"
+reset_format_entry_state
+one_line=true
+_use_color=true
+numbers_mode=true
+assert_eq "${rolling_color_esc} 50  12345${color_reset}" "$(format_entry)" \
+    "format_entry numbers one-line color aligned"
 
-_parse_args --force
-assert_eq "true" "$force" "_parse_args --force sets force=true"
+reset_format_entry_state
+one_line=true
+_use_color=true
+assert_eq "${rolling_color_esc} 50%  12345${color_reset}" "$(format_entry)" \
+    "format_entry one-line color aligned"
 
-_parse_args -f
-assert_eq "true" "$force" "_parse_args -f sets force=true"
+# format_entry: numbers mode with a width-8 bar.
+reset_format_entry_state
+width=8
+numbers_mode=true
+assert_eq "rolling 50 ████␣␣␣␣ 12345" "$(format_entry)" \
+    "format_entry numbers full with bar"
 
-# _parse_args: --only-* options can be combined with --short and --one-line.
+# format_entry: --only-* modes.
+reset_format_entry_state
+width=13
+only_field="bar"
+assert_eq "██████▄␣␣␣␣␣␣" "$(format_entry)" "format_entry only bar"
+
+reset_format_entry_state
+_duration=""
+only_field="percent"
+assert_eq "50%" "$(format_entry)" "format_entry only percent"
+
+reset_format_entry_state
+_duration=""
+numbers_mode=true
+only_field="percent"
+assert_eq "50" "$(format_entry)" "format_entry only percent with numbers"
+
+reset_format_entry_state
+_duration=""
+one_line=true
+_use_color=true
+only_field="percent"
+assert_eq "${rolling_color_esc} 50%${color_reset}" "$(format_entry)" \
+    "format_entry only percent one-line color aligned"
+
+reset_format_entry_state
+only_field="datetime"
+assert_eq "12345" "$(format_entry)" "format_entry only datetime"
+
+reset_format_entry_state
+one_line=true
+_use_color=true
+only_field="datetime"
+assert_eq "${rolling_color_esc} 12345${color_reset}" "$(format_entry)" \
+    "format_entry only datetime one-line color aligned"
+
+# parse_args: --force / -f sets force=true; default is false.
+parse_args
+# shellcheck disable=SC2154  # force is set by parse_args
+assert_eq "false" "$force" "parse_args default force is false"
+
+parse_args --force
+assert_eq "true" "$force" "parse_args --force sets force=true"
+
+parse_args -f
+assert_eq "true" "$force" "parse_args -f sets force=true"
+
+# parse_args: short-form options (apply_option dispatch) set the right globals.
+parse_args -c
+assert_eq "color" "$color_mode" "parse_args -c sets color_mode=color"
+parse_args -p
+assert_eq "plain" "$color_mode" "parse_args -p sets color_mode=plain"
+parse_args -d
+assert_eq "true" "$date_mode" "parse_args -d sets date_mode=true"
+parse_args -n
+assert_eq "true" "$numbers_mode" "parse_args -n sets numbers_mode=true"
+parse_args -1
+assert_eq "true" "$one_line" "parse_args -1 sets one_line=true"
+parse_args -s
+assert_eq "short" "$display" "parse_args -s sets display=short"
+parse_args -w 5
+assert_eq "5" "$width" "parse_args -w 5 sets width=5"
+parse_args -v
+assert_eq "vertical" "$bar_style" "parse_args -v sets bar_style=vertical"
+parse_args -z
+assert_eq "horizontal" "$bar_style" "parse_args -z sets bar_style=horizontal"
+parse_args -g
+assert_eq "gradient" "$bar_style" "parse_args -g sets bar_style=gradient"
+
+# parse_args: bar styles (-v/-z/-g) are mutually exclusive (exits non-zero).
+assert_args_fail "main rejects -v -z (styles exclusive)" -v -z
+assert_args_fail "main rejects -v -g (styles exclusive)" -v -g
+assert_args_fail "main rejects -z -g (styles exclusive)" -z -g
+
+# parse_args: --only-* options can be combined with --short and --one-line.
 display=""
 only_field=""
 only_period=""
 one_line=""
 date_mode=""
-_parse_args --only-bar --short
-assert_eq "bar" "$only_field" "_parse_args --only-bar --short accepted"
-assert_eq "short" "$display" "_parse_args --only-bar --short mode"
+parse_args --only-bar --short
+assert_eq "bar" "$only_field" "parse_args --only-bar --short accepted"
+assert_eq "short" "$display" "parse_args --only-bar --short mode"
 
-_parse_args --only-bar --one-line
-assert_eq "bar" "$only_field" "_parse_args --only-bar --one-line accepted"
-assert_eq "true" "$one_line" "_parse_args --only-bar --one-line one_line"
+parse_args --only-bar --one-line
+assert_eq "bar" "$only_field" "parse_args --only-bar --one-line accepted"
+assert_eq "true" "$one_line" "parse_args --only-bar --one-line one_line"
 
-_parse_args --only-percent --short
-assert_eq "percent" "$only_field" "_parse_args --only-percent --short accepted"
+parse_args --only-percent --short
+assert_eq "percent" "$only_field" "parse_args --only-percent --short accepted"
 
-_parse_args --only-datetime --one-line
-assert_eq "datetime" "$only_field" "_parse_args --only-datetime --one-line accepted"
+parse_args --only-datetime --one-line
+assert_eq "datetime" "$only_field" "parse_args --only-datetime --one-line accepted"
 
-_parse_args --only-bar --date
-assert_eq "bar" "$only_field" "_parse_args --only-bar --date accepted"
-assert_eq "true" "$date_mode" "_parse_args --only-bar --date date_mode"
+parse_args --only-bar --date
+assert_eq "bar" "$only_field" "parse_args --only-bar --date accepted"
+assert_eq "true" "$date_mode" "parse_args --only-bar --date date_mode"
 
-# _parse_args: --only-* period options.
-_parse_args --only-rolling
-assert_eq "rolling" "$only_period" "_parse_args --only-rolling accepted"
+# parse_args: --only-* period options.
+parse_args --only-rolling
+assert_eq "rolling" "$only_period" "parse_args --only-rolling accepted"
 
-_parse_args --only-weekly
-assert_eq "weekly" "$only_period" "_parse_args --only-weekly accepted"
+parse_args --only-weekly
+assert_eq "weekly" "$only_period" "parse_args --only-weekly accepted"
 
-_parse_args --only-monthly
-assert_eq "monthly" "$only_period" "_parse_args --only-monthly accepted"
+parse_args --only-monthly
+assert_eq "monthly" "$only_period" "parse_args --only-monthly accepted"
 
-# _parse_args: period options can combine with --only-* output options.
-_parse_args --only-weekly --only-percent
-assert_eq "weekly" "$only_period" "_parse_args --only-weekly --only-percent period"
-assert_eq "percent" "$only_field" "_parse_args --only-weekly --only-percent mode"
+# parse_args: period options can combine with --only-* output options.
+parse_args --only-weekly --only-percent
+assert_eq "weekly" "$only_period" "parse_args --only-weekly --only-percent period"
+assert_eq "percent" "$only_field" "parse_args --only-weekly --only-percent mode"
 
-# _parse_args: --only-* options remain mutually exclusive with each other.
-assert_args_fail() {
-    local name="$1"
-    shift
-    if ./opencode-go-usage.sh "$@" >/dev/null 2>&1
-    then
-        fail=$((fail + 1))
-        echo "not ok - $name"
-    else
-        pass=$((pass + 1))
-        echo "ok - $name"
-    fi
-}
+# parse_args: --only-* options remain mutually exclusive with each other.
+assert_args_fail "parse_args rejects --only-bar --only-percent" --only-bar --only-percent
+assert_args_fail "parse_args rejects --only-percent --only-datetime" --only-percent --only-datetime
+assert_args_fail "parse_args rejects --only-rolling --only-weekly" --only-rolling --only-weekly
+assert_args_fail "parse_args rejects --only-weekly --only-monthly" --only-weekly --only-monthly
+assert_args_fail "parse_args rejects removed -r option" -r
+assert_args_fail "parse_args rejects removed --percent option" --percent
+assert_args_fail "main rejects --only-bar --short" --only-bar --short
+assert_args_fail "main rejects --only-bar --one-line" --only-bar --one-line
 
-assert_args_fail "_parse_args rejects --only-bar --only-percent" --only-bar --only-percent
-assert_args_fail "_parse_args rejects --only-percent --only-datetime" --only-percent --only-datetime
-assert_args_fail "_parse_args rejects --only-rolling --only-weekly" --only-rolling --only-weekly
-assert_args_fail "_parse_args rejects --only-weekly --only-monthly" --only-weekly --only-monthly
-assert_args_fail "_parse_args rejects removed -r option" -r
-assert_args_fail "_parse_args rejects removed --percent option" --percent
-assert_args_fail "_main rejects --only-bar --short" --only-bar --short
-assert_args_fail "_main rejects --only-bar --one-line" --only-bar --one-line
+# validate_width: default-width logic (success cases, in-process).
+# Each call resets shared state via parse_args, then validate_width sets width.
+parse_args -s
+validate_width
+assert_eq "0" "$width" "validate_width default width for -s is 0"
 
-# _render_output helpers set the shared-state globals before each call.
-# shellcheck disable=SC2034  # these globals are consumed by _render_output
-_setup_render_output() {
-    display="$1"
-    color_mode="$2"
-    width="$3"
-    one_line="$4"
-    date_mode="$5"
-    numbers_mode="$6"
-    bar_style="$7"
-    only_field="$8"
-    only_period="$9"
-}
+parse_args -1
+validate_width
+assert_eq "0" "$width" "validate_width default width for -1 is 0"
 
-# _render_output: date prefix in one-line mode includes a comma.
-# Save originals before overriding with stubs.
-_timestamp_orig=$(declare -f _timestamp)
-_human_readable_short_orig=$(declare -f _human_readable_short)
-_seconds_until_iso_orig=$(declare -f _seconds_until_iso)
-_human_readable_orig=$(declare -f _human_readable)
-# shellcheck disable=SC2329  # invoked indirectly through _render_output
-_timestamp() { printf '%s' "2026-08-23T12:00:00"; }
-# shellcheck disable=SC2329  # invoked indirectly through _render_output
-_human_readable_short() { printf '%s' "FIXED"; }
-_setup_render_output "full" "plain" "0" "true" "true" "false" "vertical" "none" "all"
+parse_args --only-percent
+validate_width
+assert_eq "0" "$width" "validate_width default width for --only-percent is 0"
+
+parse_args --only-datetime
+validate_width
+assert_eq "0" "$width" "validate_width default width for --only-datetime is 0"
+
+parse_args --only-bar
+validate_width
+assert_eq "8" "$width" "validate_width default width for --only-bar is 8"
+
+parse_args
+validate_width
+assert_eq "8" "$width" "validate_width default width for no options is 8"
+
+# validate_width: explicit widths within range pass through unchanged.
+parse_args -w 0
+validate_width
+assert_eq "0" "$width" "validate_width -w 0 ok for non-bar"
+
+parse_args -w 5
+validate_width
+assert_eq "5" "$width" "validate_width -w 5 ok"
+
+parse_args -w 13
+validate_width
+assert_eq "13" "$width" "validate_width -w 13 ok (upper bound)"
+
+# validate_width returns 0 on the success path (guards the &&-chain leak).
+parse_args -w 8
+validate_width
+rc=$?
+assert_eq "0" "$rc" "validate_width returns 0 on success"
+
+# validate_width: failure paths exit non-zero (run as subprocesses because
+# exit_fail would otherwise kill the test process).
+assert_args_fail "validate_width rejects -w 14 (above range)" -w 14
+assert_args_fail "validate_width rejects -w abc (non-numeric)" -w abc
+assert_args_fail "validate_width rejects --only-bar -w 0" --only-bar -w 0
+assert_args_fail "validate_width rejects -s -1 (short+one-line)" -s -1
+
+# render_output tests: stub save, then reset+override shared state per test.
+timestamp_orig=$(declare -f timestamp)
+human_readable_short_orig=$(declare -f human_readable_short)
+seconds_until_iso_orig=$(declare -f seconds_until_iso)
+human_readable_orig=$(declare -f human_readable)
+# shellcheck disable=SC2329  # invoked indirectly through render_output
+timestamp() { printf '%s' "2026-08-23T12:00:00"; }
+# shellcheck disable=SC2329  # invoked indirectly through render_output
+human_readable_short() { printf '%s' "FIXED"; }
+
+# render_output: date prefix in one-line mode includes a comma.
+reset_render_output_state
+one_line=true
+date_mode=true
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output)
+    | render_output)
 assert_eq "2026-08-23T12:00:00,  21%  FIXED,  55%  FIXED" "$output" \
-    "_render_output one-line date prefix uses comma"
+    "render_output one-line date prefix uses comma"
 
-# _render_output: -d with -n uses epoch seconds for the timestamp prefix.
-# shellcheck disable=SC2329  # invoked indirectly through _render_output
-_seconds_until_iso() { printf '%s' "SECS"; }
-# shellcheck disable=SC2329  # invoked indirectly through _render_output
-_timestamp() { printf '%s' "1755950400"; }
-_setup_render_output "full" "plain" "0" "false" "true" "true" "vertical" "none" "all"
+# render_output: -d with -n uses epoch seconds for the timestamp prefix.
+# shellcheck disable=SC2329  # invoked indirectly through render_output
+seconds_until_iso() { printf '%s' "SECS"; }
+# shellcheck disable=SC2329  # invoked indirectly through render_output
+timestamp() { printf '%s' "1755950400"; }
+reset_render_output_state
+date_mode=true
+numbers_mode=true
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output)
+    | render_output)
 first_line="${output%%$'\n'*}"
 assert_eq "1755950400 rolling 21 SECS" "$first_line" \
-    "_render_output numbers date prefix uses epoch seconds"
+    "render_output numbers date prefix uses epoch seconds"
 
-# _render_output: -d -n -1 uses epoch seconds and a comma separator.
-_setup_render_output "full" "plain" "0" "true" "true" "true" "vertical" "none" "all"
+# render_output: -d -n -1 uses epoch seconds and a comma separator.
+reset_render_output_state
+one_line=true
+date_mode=true
+numbers_mode=true
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\n' \
-    | _render_output)
+    | render_output)
 assert_eq "1755950400,  21   SECS,  55   SECS" "$output" \
-    "_render_output numbers one-line date prefix uses epoch seconds and comma"
+    "render_output numbers one-line date prefix uses epoch seconds and comma"
 
-# _render_output: --only-period filters to a single period.
-# shellcheck disable=SC2329  # invoked indirectly through _render_output
-_human_readable() { printf '%s' "DURATION"; }
-_setup_render_output "full" "plain" "0" "false" "false" "false" "vertical" "none" "weekly"
+# render_output: --only-period filters to a single period.
+# shellcheck disable=SC2329  # invoked indirectly through render_output
+human_readable() { printf '%s' "DURATION"; }
+reset_render_output_state
+only_period="weekly"
 output=$(printf 'rolling,21,2026-08-23T15:00:00Z\nweekly,55,2026-08-23T14:00:00Z\nmonthly,45,2026-08-23T13:00:00Z\n' \
-    | _render_output)
+    | render_output)
 assert_eq " weekly 55% DURATION" "$output" \
-    "_render_output --only-weekly filters periods"
+    "render_output --only-weekly filters periods"
 
 # Restore the real functions.
-unset -f _timestamp _human_readable_short _seconds_until_iso _human_readable
-eval "$_timestamp_orig"
-eval "$_human_readable_short_orig"
-eval "$_seconds_until_iso_orig"
-eval "$_human_readable_orig"
+unset -f timestamp human_readable_short seconds_until_iso human_readable
+eval "$timestamp_orig"
+eval "$human_readable_short_orig"
+eval "$seconds_until_iso_orig"
+eval "$human_readable_orig"
 
-echo ""
-echo "passed: $pass  failed: $fail"
+printf '# passed: %d  failed: %d\n' "$pass" "$fail"
+printf '1..%d\n' "$n"
 exit "$fail"

@@ -8,20 +8,25 @@
 ## Function naming
 
 All functions in this project are internal to a single self-contained script,
-so **every function name is prefixed with `_`** and uses `snake_case`.
-This includes the entry point, which is named `_main`
+so function names use plain `snake_case` with **no leading underscore**.
+This includes the entry point, which is named `main`
 and invoked only when the script is executed directly (not when sourced):
 
 ```bash
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
 then
-    _main "$@"
+    main "$@"
 fi
 ```
 
 Keep helper functions small,
 use `local` for all function variables,
 and mark top-level constants `readonly`.
+
+The leading-underscore convention is reserved for **module-private
+shared-state variables** (for example `_period`, `_percent`, `_duration`,
+`_use_color`, `_short_mode`) and read-only metadata constants
+(`_optstring`, `_long_alias`); it is *not* applied to function names.
 
 ## Control-flow style
 
@@ -95,10 +100,17 @@ Alert the user to these problems when you spot them.
 
 ## Testing
 
-Core, pure functions (especially the progress-bar `_bar` renderer)
-are tested in `test_opencode-go-usage.sh`.
+Core, pure functions are tested in `test_opencode-go-usage.sh`:
+the progress-bar `bar` renderer, `format_duration`, `duration_from_iso8601`,
+`human_readable` / `human_readable_short` (with `seconds_until_iso` stubbed
+for a deterministic clock), `format_entry`, `parse_args`, `apply_option`,
+`validate_width`, `parse_usage_json`, and `render_output`.
+
 The test file sources the main script through the entry-point guard
-and runs a small built-in harness.
+and runs a small built-in harness. Output is TAP-formatted
+(`ok N - name` / `not ok N - name` with a trailing `1..N` plan and
+`#`-prefixed diagnostics) so it can be consumed by `prove`/`yath`.
+The harness exits non-zero if any assertion failed.
 
 ## Terminal rendering assumptions
 
