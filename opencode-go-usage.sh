@@ -438,8 +438,7 @@ apply_option() {
         *) exit_fail "unknown option: -$short"  ;;
     esac
 
-    # Explicit return 0 to prevent the c) &&-chain's non-zero status
-    # (when color_mode is already "plain") from leaking out under set -e.
+    # Explicit return 0 to prevent return codes leaking
     return 0
 }
 
