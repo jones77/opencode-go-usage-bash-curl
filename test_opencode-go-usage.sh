@@ -401,6 +401,27 @@ parse_args --plain --color
 assert_eq "plain" "$color_mode" "parse_args --plain --color plain wins"
 parse_args --color --plain
 assert_eq "plain" "$color_mode" "parse_args --color --plain plain wins"
+
+# Regression: the in-process harness runs with `set +e`, which would hide the
+# apply_option &&-chain leak. Re-run the real script under `set -e` so the
+# script dies (non-zero) if -c/--color leaks a non-zero status after -p/--plain.
+bash -c '
+set -euo pipefail
+source ./opencode-go-usage.sh
+parse_args -p -c
+[[ "$color_mode" == "plain" ]]
+' 2>/dev/null
+rc=$?
+assert_eq "0" "$rc" "parse_args -p -c survives set -e (plain wins)"
+
+bash -c '
+set -euo pipefail
+source ./opencode-go-usage.sh
+parse_args --plain --color
+[[ "$color_mode" == "plain" ]]
+' 2>/dev/null
+rc=$?
+assert_eq "0" "$rc" "parse_args --plain --color survives set -e (plain wins)"
 parse_args -d
 assert_eq "true" "$date_mode" "parse_args -d sets date_mode=true"
 parse_args -n

@@ -8,7 +8,7 @@ readonly progname="$(basename "${BASH_SOURCE[0]}")"
 readonly progdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 readonly cache_filename=".opencode-go-usage-cache"
-readonly cache_filename_ttl=120
+readonly cache_ttl=120
 
 exit_fail() {
     echo "$progname: error: $*" >&2
@@ -122,11 +122,9 @@ mtime_seconds() {
 readonly -A period_color=([rolling]=27 [weekly]=28 [monthly]=166)
 
 format_duration() {
-    declare -A args=(
-        [d]=$1 [h]=$2 [m]=$3 [s]=$4
-    )
+    declare -A args=([d]=$1 [h]=$2 [m]=$3 [s]=$4)
     local string=
-    for unit in "d" "h" "m" "s"
+    for unit in d h m s
     do
         local value=${args[$unit]}
         (( value == 0 )) && continue
@@ -341,11 +339,12 @@ response: '$body'"
 
 # Option metadata used by parse_args. getopts consumes _optstring;
 # the long_alias map lets the long-option loop dispatch through apply_option.
-readonly _optstring=":hcpdn1svzgw:f"
+readonly _optstring=":1cdfghnpsvw:z"
 
 format_entry() {
     local period="$1" percent="$2" duration="$3" use_color="$4"
-    [[ -n "$period" ]] || exit_fail "unexpected period: '$period'"
+    [[ "$period" =~ ^(rolling|weekly|monthly)$ ]] \
+        || exit_fail "unexpected period: '$period'"
 
     local color_esc="" reset_esc=""
     if "$use_color"
@@ -356,36 +355,27 @@ format_entry() {
 
     case "$only_field" in
         bar)
-            printf "%s%s%s" \
-                "$color_esc" \
-                "$(bar "$percent" "$width" "$bar_style")" "$reset_esc"
-            return
+                printf "%s%s%s" \
+                    "$color_esc" \
+                    "$(bar "$percent" "$width" "$bar_style")" "$reset_esc"
+                return
             ;;
         percent)
-            local pfmt="%.0f"
-            if "$one_line" && "$use_color"
-            then
-                pfmt="%3.0f"
-            fi
-            # Use "%%" so printf prints a literal "%"; a bare "%" would be
-            # interpreted as the start of another conversion specifier.
-            local suffix="%%"
-            if "$numbers_mode"
-            then
-                suffix=""
-            fi
-            printf "%s${pfmt}${suffix}%s" \
-                "$color_esc" "$percent" "$reset_esc"
-            return
+                local pfmt="%.0f"
+                "$one_line" && "$use_color" && pfmt="%3.0f"
+                # Use "%%" so printf prints a literal "%"; a bare "%" would be
+                # interpreted as the start of another conversion specifier.
+                local suffix="%%"
+                "$numbers_mode" && suffix=""
+                printf "%s${pfmt}${suffix}%s" \
+                    "$color_esc" "$percent" "$reset_esc"
+                return
             ;;
         datetime)
-            local dfmt="%s"
-            if "$one_line" && "$use_color"
-            then
-                dfmt="%6s"
-            fi
-            printf "%s${dfmt}%s" "$color_esc" "$duration" "$reset_esc"
-            return
+                local dfmt="%s"
+                "$one_line" && "$use_color" && dfmt="%6s"
+                printf "%s${dfmt}%s" "$color_esc" "$duration" "$reset_esc"
+                return
             ;;
     esac
 
@@ -412,10 +402,7 @@ format_entry() {
     # Use "%%" so printf prints a literal "%"; a bare "%" would be
     # interpreted as the start of another conversion specifier.
     local pct="%%"
-    if "$numbers_mode"
-    then
-        pct=""
-    fi
+    "$numbers_mode" && pct=""
 
     local dur_sep=" "
     [[ -z "$duration" ]] && dur_sep=""
@@ -428,31 +415,32 @@ format_entry() {
 apply_option() {
     local short="$1" arg="${2:-}"
     case "$short" in
-        h) usage; exit 0 ;;
+        h) usage; exit 0        ;;
         c)
             # --plain wins over --color regardless of argument order: only
             # p) ever sets color_mode to "plain", so it doubles as a sentinel.
-            if [[ "$color_mode" != "plain" ]]
-            then
-                color_mode="color"
-            fi
-            ;;
-        p) color_mode="plain" ;;
-        d) date_mode=true ;;
-        f) force=true ;;
-        n) numbers_mode=true ;;
-        1) one_line=true ;;
-        s) display="short" ;;
+            [[ "$color_mode" != "plain" ]] && color_mode="color"
+        ;;
+        p) color_mode="plain"   ;;
+        d) date_mode=true       ;;
+        f) force=true           ;;
+        n) numbers_mode=true    ;;
+        1) one_line=true        ;;
+        s) display="short"      ;;
         v|z|g)
             [[ "$bar_style_set" == true ]] && exit_fail "styles are exclusive"
             case "$short" in v) bar_style="vertical"   ;;
                              z) bar_style="horizontal" ;;
-                             g) bar_style="gradient"   ;; esac
-            bar_style_set=true
-            ;;
-        w) width="$arg" ;;
-        *) exit_fail "unknown option: -$short" ;;
+                             g) bar_style="gradient"   ;;
+            esac
+            bar_style_set=true                  ;;
+        w) width="$arg"                         ;;
+        *) exit_fail "unknown option: -$short"  ;;
     esac
+
+    # Explicit return 0 to prevent the c) &&-chain's non-zero status
+    # (when color_mode is already "plain") from leaking out under set -e.
+    return 0
 }
 
 set_only_field() {
@@ -544,7 +532,7 @@ load_lines() {
         mtime=${mtime:-0}
     fi
 
-    if [[ "$force" != true ]] && (( now - mtime < cache_filename_ttl ))
+    if [[ "$force" != true ]] && (( now - mtime < cache_ttl ))
     then
         read_cache "$cache_path"
     else
@@ -650,7 +638,7 @@ parse_args() {
     done
 
     local OPTIND=1 OPTARG="" opt
-    while getopts "$_optstring" opt "${short_args[@]}"
+    while getopts "$_optstring" opt "${short_args[@]+"${short_args[@]}"}"
     do
         case "$opt" in
             \?) exit_fail "unknown option: -$OPTARG"  ;;
@@ -665,7 +653,7 @@ parse_args() {
         esac
     done
 
-    set -- "${long_args[@]}"
+    set -- "${long_args[@]+"${long_args[@]}"}"
     while (( $# > 0 ))
     do
         local arg="$1"
@@ -688,7 +676,7 @@ parse_args() {
                         short="${long_alias[$name]:-}"
                         if [[ -z "$short" ]]
                         then
-                            usage
+                            usage >&2
                             exit_fail "unknown argument: '$arg'"
                         fi
                         if [[ "$short" == "w" ]]

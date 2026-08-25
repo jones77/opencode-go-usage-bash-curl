@@ -8,11 +8,11 @@ Results are cached
 or in `$TMPDIR`)
 for 120 seconds so repeated runs don't hit the API.
 
-Depends on Bash V4, curl, and Python 3
+Depends on Bash V4.4+, curl, and Python 3
 (for JSON and unix-compatible iso-8601 parsing,
 eg BSD `/usr/bin/date` can't parse iso-8601)
 
-- **bash** 4.x+
+- **bash** 4.4+ (4.4 fixed empty-array expansion under `set -u`)
 - **python3** (for ISO-8601 timestamp parsing and JSON handling)
 - **curl**
 
