@@ -527,7 +527,7 @@ render_output() {
     "$one_line" && [[ -n "$joined" ]] \
         && printf '%s\n' "${ts_prefix}${joined}"
 
-    # Explicit return 0 to prevent return codes leaking.  For example,
+    # Explicit return 0 to prevent return codes leaking
     return 0
 }
 
@@ -575,7 +575,7 @@ validate_width() {
     [[ "$only_field" = "bar" && "$width" = "0" ]] \
         && exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
 
-    # Explicit return 0 to prevent return codes leaking.  For example,
+    # Explicit return 0 to prevent return codes leaking
     return 0
 }
 
