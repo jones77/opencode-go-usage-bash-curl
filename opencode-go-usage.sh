@@ -100,13 +100,13 @@ cache_abs_path() {
     local tmp_cache="${TMPDIR:-/tmp}/$cache_filename"
     local local_cache="$progdir/$cache_filename"
 
-    if touch        "$local_cache.$$" 2>/dev/null
+    if touch "$local_cache.$$" 2>/dev/null
     then
-        rm -f       "$local_cache.$$"
+        rm -f "$local_cache.$$"
         printf '%s' "$local_cache"
-    elif touch      "$tmp_cache.$$"   2>/dev/null
+    elif touch "$tmp_cache.$$"   2>/dev/null
     then
-        rm -f       "$tmp_cache.$$"
+        rm -f "$tmp_cache.$$"
         printf '%s' "$tmp_cache"
     else
         exit_fail "can't cache: no permissions to create" \
@@ -115,29 +115,22 @@ cache_abs_path() {
 }
 
 mtime_seconds() {
-    local file="$1"
-    stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null
+    # GNU                          BSD/MacOS
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
 }
 
 readonly -A period_color=([rolling]=27 [weekly]=28 [monthly]=166)
 
 format_duration() {
     declare -A args=(
-        [d]=$1
-        [h]=$2
-        [m]=$3
-        [s]=$4
+        [d]=$1 [h]=$2 [m]=$3 [s]=$4
     )
     local string=
     for unit in "d" "h" "m" "s"
     do
         local value=${args[$unit]}
         (( value == 0 )) && continue
-
-        if [[ -n "$string" ]]
-        then
-            string="$string "
-        fi
+        [[ -n "$string" ]] && string="$string "
         printf -v string "$string%2s$unit" "$value"
     done
 
@@ -337,7 +330,7 @@ response: '$body'"
         exit_fail "expected API response to contain 3 periods"
 
     local tmp="$cache.$$"
-    if ! printf '%s\n' "$parsed" > "$tmp" 2>/dev/null \
+    if     ! printf '%s\n' "$parsed" > "$tmp" 2>/dev/null \
         || ! mv -f "$tmp" "$cache" 2>/dev/null
     then
         rm -f "$tmp"
@@ -349,22 +342,6 @@ response: '$body'"
 # Option metadata used by parse_args. getopts consumes _optstring;
 # the long_alias map lets the long-option loop dispatch through apply_option.
 readonly _optstring=":hcpdn1svzgw:f"
-
-# shellcheck disable=SC2154  # associative-array keys, not variables
-readonly -A _long_alias=(
-    [color]=c
-    [date]=d
-    [force]=f
-    [gradient]=g
-    [help]=h
-    [horizontal]=z
-    [numbers]=n
-    [one-line]=1
-    [plain]=p
-    [short]=s
-    [vertical]=v
-    [width]=w
-)
 
 format_entry() {
     local period="$1" percent="$2" duration="$3" use_color="$4"
@@ -603,35 +580,40 @@ validate_width() {
     return 0
 }
 
+# shellcheck disable=SC2154  # associative-array keys, not variables
+readonly -A long_alias=(
+    [color]=c
+    [date]=d
+    [force]=f
+    [gradient]=g
+    [help]=h
+    [horizontal]=z
+    [numbers]=n
+    [one-line]=1
+    [plain]=p
+    [short]=s
+    [vertical]=v
+    [width]=w
+)
+
 # Shared state, the following configuration globals are
 # -      set by: parse_args, apply_option
 # - consumed by: render_output, format_entry
 #
 # Keep them in sync across these functions!
 #
-# bar_style      "vertical" | "horizontal" | "gradient"
-# bar_style_set  true | false
-# color_mode     "auto" | "color" | "plain"
-# date_mode      true | false
-# display        "full" | "short"
-# force          true | false
-# numbers_mode   true | false
-# one_line       true | false
-# only_period    "all" | "rolling" | "weekly" | "monthly"
-# only_field     "none" | "bar" | "percent" | "datetime"
-# width          bar width (numeric string), "" means "use default"
 init_shared_state() {
-    bar_style="vertical"
+    bar_style="vertical"  # or "horizontal" or "gradient"
     bar_style_set=false
-    color_mode="auto"
+    color_mode="auto"     # or "color" or "plain"
     date_mode=false
-    display="full"
+    display="full"        # or "short"
     force=false
     numbers_mode=false
     one_line=false
-    only_period="all"
-    only_field="none"
-    width=""
+    only_period="all"     # "rolling" or "weekly" or "monthly"
+    only_field="none"     # "bar" or "percent" or "datetime"
+    width=""              # bar width (numeric string), "" means "use default"
 }
 
 parse_args() {
@@ -646,32 +628,23 @@ parse_args() {
     while (( $# > 0 ))
     do
         case "$1" in
-            --width)
-                (( $# < 2 )) && exit_fail "--width requires a value"
-                long_args+=("$1" "$2")
-                shift 2
+            --width)    (( $# < 2 )) && exit_fail "--width requires a value"
+                        long_args+=("$1" "$2")
+                        shift 2
                 ;;
             --width=*|--*)
-                long_args+=("$1")
-                shift
+                        long_args+=("$1")
+                        shift
                 ;;
-            -w)
-                (( $# < 2 )) && exit_fail "-w requires a value"
-                short_args+=("$1" "$2")
-                shift 2
+            -w)         (( $# < 2 )) && exit_fail "-w requires a value"
+                        short_args+=("$1" "$2")
+                        shift 2
                 ;;
-            -*)
-                if [[ "$1" == "-" ]]
-                then
-                    usage
-                    exit_fail "unknown argument: '-'"
-                fi
-                short_args+=("$1")
-                shift
+            -*)         [[ "$1" == "-" ]] && exit_fail "unknown argument: '-'"
+                        short_args+=("$1")
+                        shift
                 ;;
-            *)
-                usage
-                exit_fail "unknown argument: '$1'"
+            *)          exit_fail "unknown argument: '$1'"
                 ;;
         esac
     done
@@ -680,7 +653,7 @@ parse_args() {
     while getopts "$_optstring" opt "${short_args[@]}"
     do
         case "$opt" in
-            \?) exit_fail "unknown option: -$OPTARG" ;;
+            \?) exit_fail "unknown option: -$OPTARG"  ;;
              :) exit_fail "-$OPTARG requires a value" ;;
              *) if [[ "$opt" == "w" ]]
                 then
@@ -698,38 +671,35 @@ parse_args() {
         local arg="$1"
         shift
         case "$arg" in
-            --width=*) width="${arg#--width=}" ;;
-            --width)
-                if (( $# == 0 ))
-                then
-                    exit_fail "--width requires a value"
-                fi
-                apply_option "w" "$1"
-                shift
+            --width=*)  width="${arg#--width=}"
                 ;;
-            --only-bar)      set_only_field  "bar"      ;;
-            --only-percent)  set_only_field  "percent"  ;;
-            --only-datetime) set_only_field  "datetime" ;;
-            --only-rolling)  set_only_period "rolling"  ;;
-            --only-weekly)   set_only_period "weekly"   ;;
-            --only-monthly)  set_only_period "monthly"  ;;
-            --*)
-                local name="${arg#--}"
-                local short
-                short="${_long_alias[$name]:-}"
-                if [[ -z "$short" ]]
-                then
-                    usage
-                    exit_fail "unknown argument: '$arg'"
-                fi
-                if [[ "$short" == "w" ]]
-                then
-                    (( $# == 0 )) && exit_fail "--$name requires a value"
-                    apply_option "$short" "$1"
-                    shift
-                else
-                    apply_option "$short"
-                fi
+            --width)    (( $# == 0 )) && exit_fail "--width requires a value"
+                        apply_option "w" "$1"
+                        shift
+                ;;
+            --only-bar)         set_only_field  "bar"      ;;
+            --only-percent)     set_only_field  "percent"  ;;
+            --only-datetime)    set_only_field  "datetime" ;;
+            --only-rolling)     set_only_period "rolling"  ;;
+            --only-weekly)      set_only_period "weekly"   ;;
+            --only-monthly)     set_only_period "monthly"  ;;
+            --*)        local name="${arg#--}"
+                        local short
+                        short="${long_alias[$name]:-}"
+                        if [[ -z "$short" ]]
+                        then
+                            usage
+                            exit_fail "unknown argument: '$arg'"
+                        fi
+                        if [[ "$short" == "w" ]]
+                        then
+                            (( $# == 0 )) \
+                                && exit_fail "--$name requires a value"
+                            apply_option "$short" "$1"
+                            shift
+                        else
+                            apply_option "$short"
+                        fi
                 ;;
         esac
     done
