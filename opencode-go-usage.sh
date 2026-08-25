@@ -524,10 +524,11 @@ render_output() {
         fi
     done
 
-    if "$one_line" && [[ -n "$joined" ]]
-    then
-        printf '%s\n' "${ts_prefix}${joined}"
-    fi
+    "$one_line" && [[ -n "$joined" ]] \
+        && printf '%s\n' "${ts_prefix}${joined}"
+
+    # Explicit return 0 to prevent return codes leaking.  For example,
+    return 0
 }
 
 load_lines() {
@@ -575,8 +576,6 @@ validate_width() {
         && exit_fail "--only-bar can't be used with -w 0 (bar would be empty)"
 
     # Explicit return 0 to prevent return codes leaking.  For example,
-    # `fn_that_returns_1 && fn_wont_run` won't run `fn_wont_run` but will
-    # return code 1 out of the function because fn_that_returns_1 ran last.
     return 0
 }
 
@@ -703,11 +702,12 @@ parse_args() {
                 ;;
         esac
     done
+
+    validate_width
 }
 
 main() {
     parse_args "$@"
-    validate_width
     load_lines | render_output
 }
 
