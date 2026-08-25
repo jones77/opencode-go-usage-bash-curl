@@ -424,11 +424,6 @@ assert_args_fail "main rejects -v -g (styles exclusive)" -v -g
 assert_args_fail "main rejects -z -g (styles exclusive)" -z -g
 
 # parse_args: --only-* options can be combined with --short and --one-line.
-display=""
-only_field=""
-only_period=""
-one_line=""
-date_mode=""
 parse_args --only-bar --short
 assert_eq "bar" "$only_field" "parse_args --only-bar --short accepted"
 assert_eq "short" "$display" "parse_args --only-bar --short mode"

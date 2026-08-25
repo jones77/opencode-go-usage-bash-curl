@@ -75,13 +75,13 @@ $(for ww in 13 12 11 10 9 8 7 6 5 4 3 2 1
           1)  step="12.5";   cell="100" ;;
       esac
       vbar="$(bar 67 "$ww" vertical)"
-      hbar="$(bar 50 "$ww" horizontal)"
+      hbar="$(bar 67 "$ww" horizontal)"
       # printf field widths count bytes, but the bar glyphs are 3-byte UTF-8
       # characters, so pad manually to a 17-character field.
-      printf '  %5d  %7.4f%% %9.4f%%  %s%*s  %s%*s\n' \
+      printf '  %5d  %7.4f%% %9.4f%%  %s%*s  %s\n' \
                 "$ww" "$step" "$cell" \
                 "$vbar" $((17 - ww)) '' \
-                "$hbar" $((17 - ww)) ''
+                "$hbar"
   done)
 EOF
 }
@@ -465,7 +465,7 @@ set_only_field() {
 set_only_period() {
     local new="$1"
     [[ "$only_period" != "all" ]] \
-        && exit_fail "--only-rolling/-weekly/-monthly are mutually exclusive"
+        && exit_fail "--only-rolling/--only-weekly/--only-monthly are mutually exclusive"
     only_period="$new"
 }
 
@@ -506,7 +506,8 @@ render_output() {
             duration=""
         elif "$numbers_mode"
         then
-            duration=$(seconds_until_iso "$timedate")
+            duration=$(seconds_until_iso "$timedate") \
+                || exit_fail "failed to parse ISO timestamp: $timedate"
         elif [[ "$display" = "short" || "$one_line" = true ]]
         then
             duration=$(human_readable_short "$timedate")
