@@ -412,36 +412,6 @@ format_entry() {
         "$color_esc" "$prefix" "$percent" "$bar_out" "$duration" "$reset_esc"
 }
 
-apply_option() {
-    local short="$1" arg="${2:-}"
-    case "$short" in
-        h) usage; exit 0        ;;
-        c)
-            # --plain wins over --color regardless of argument order: only
-            # p) ever sets color_mode to "plain", so it doubles as a sentinel.
-            [[ "$color_mode" != "plain" ]] && color_mode="color"
-        ;;
-        p) color_mode="plain"   ;;
-        d) date_mode=true       ;;
-        f) force=true           ;;
-        n) numbers_mode=true    ;;
-        1) one_line=true        ;;
-        s) display="short"      ;;
-        v|z|g)
-            [[ "$bar_style_set" == true ]] && exit_fail "styles are exclusive"
-            case "$short" in v) bar_style="vertical"   ;;
-                             z) bar_style="horizontal" ;;
-                             g) bar_style="gradient"   ;;
-            esac
-            bar_style_set=true                  ;;
-        w) width="$arg"                         ;;
-        *) exit_fail "unknown option: -$short"  ;;
-    esac
-
-    # Explicit return 0 to prevent return codes leaking
-    return 0
-}
-
 set_only_field() {
     local new="$1"
     [[ "$only_field" != "none" ]] \
@@ -583,6 +553,36 @@ readonly -A long_alias=(
     [width]=w
 )
 
+apply_option() {
+    local short="$1" arg="${2:-}"
+    case "$short" in
+        h) usage; exit 0        ;;
+        c)
+            # --plain wins over --color regardless of argument order: only
+            # p) ever sets color_mode to "plain", so it doubles as a sentinel.
+            [[ "$color_mode" != "plain" ]] && color_mode="color"
+        ;;
+        p) color_mode="plain"   ;;
+        d) date_mode=true       ;;
+        f) force=true           ;;
+        n) numbers_mode=true    ;;
+        1) one_line=true        ;;
+        s) display="short"      ;;
+        v|z|g)
+            [[ "$bar_style_set" == true ]] && exit_fail "styles are exclusive"
+            case "$short" in v) bar_style="vertical"   ;;
+                             z) bar_style="horizontal" ;;
+                             g) bar_style="gradient"   ;;
+            esac
+            bar_style_set=true                  ;;
+        w) width="$arg"                         ;;
+        *) exit_fail "unknown option: -$short"  ;;
+    esac
+
+    # Explicit return 0 to prevent return codes leaking
+    return 0
+}
+
 # Shared state, the following configuration globals are
 # -      set by: parse_args, apply_option
 # - consumed by: render_output, format_entry
@@ -665,26 +665,22 @@ parse_args() {
         local arg="$1"
         shift
         case "$arg" in
-            --width=*)  width="${arg#--width=}"
-                ;;
+            --width=*)  width="${arg#--width=}"             ;;
             --width)    (( $# == 0 )) && exit_fail "--width requires a value"
                         apply_option "w" "$1"
                         shift
                 ;;
-            --only-bar)         set_only_field  "bar"      ;;
-            --only-percent)     set_only_field  "percent"  ;;
-            --only-datetime)    set_only_field  "datetime" ;;
-            --only-rolling)     set_only_period "rolling"  ;;
-            --only-weekly)      set_only_period "weekly"   ;;
-            --only-monthly)     set_only_period "monthly"  ;;
+            --only-bar)         set_only_field  "bar"       ;;
+            --only-percent)     set_only_field  "percent"   ;;
+            --only-datetime)    set_only_field  "datetime"  ;;
+            --only-rolling)     set_only_period "rolling"   ;;
+            --only-weekly)      set_only_period "weekly"    ;;
+            --only-monthly)     set_only_period "monthly"   ;;
             --*)        local name="${arg#--}"
                         local short
                         short="${long_alias[$name]:-}"
-                        if [[ -z "$short" ]]
-                        then
-                            usage >&2
-                            exit_fail "unknown argument: '$arg'"
-                        fi
+                        [[ -z "$short" ]] \
+                            && exit_fail "unknown argument: '$arg'"
                         if [[ "$short" == "w" ]]
                         then
                             (( $# == 0 )) \
