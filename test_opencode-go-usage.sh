@@ -432,6 +432,11 @@ parse_args -s
 assert_eq "short" "$display" "parse_args -s sets display=short"
 parse_args -w 5
 assert_eq "5" "$width" "parse_args -w 5 sets width=5"
+parse_args -dgw 13
+assert_eq "true" "$date_mode" "parse_args -dgw 13 sets date_mode=true"
+assert_eq "gradient" "$bar_style" "parse_args -dgw 13 sets bar_style=gradient"
+assert_eq "13" "$width" "parse_args -dgw 13 sets width=13"
+assert_args_fail "parse_args rejects -dgw without value" -dgw
 parse_args -v
 assert_eq "vertical" "$bar_style" "parse_args -v sets bar_style=vertical"
 parse_args -z

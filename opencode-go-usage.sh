@@ -609,7 +609,8 @@ parse_args() {
     init_shared_state
 
     # Separate short and long options before dispatching. Only -w/--width
-    # take values, so those two forms must consume their following argument.
+    # take values, so -w (whether bare or trailing a combined short string
+    # like -dgw) and --width must each consume their following argument.
     local -a short_args=()
     local -a long_args=()
     while (( $# > 0 ))
@@ -629,7 +630,13 @@ parse_args() {
                 ;;
             -*)         [[ "$1" == "-" ]] && exit_fail "unknown argument: '-'"
                         short_args+=("$1")
-                        shift
+                        if [[ "$1" =~ w$ ]] && (( $# >= 2 ))
+                        then
+                            short_args+=("$2")
+                            shift 2
+                        else
+                            shift
+                        fi
                 ;;
             *)          exit_fail "unknown argument: '$1'"
                 ;;
